@@ -15,8 +15,15 @@ from typing import Any
 
 logger = logging.getLogger("gateway.agent_loader")
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Root
+# ──────────────────────────────────────────────────────────────────────────────
 
 _AGENTS_ROOT = Path(__file__).resolve().parent / "agents"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# File helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def _read_if_exists(path: Path) -> str:
@@ -51,7 +58,8 @@ def _fallback_agent_regex(raw: str) -> dict[str, Any]:
     """Tiny regex extractors for repo agent.yaml when PyYAML is not installed."""
 
     def _find(key: str) -> str | None:
-        m = re.search(rf"(?m)^{re.escape(key)}:\s*(.+)\s*$", raw)
+        pattern = rf"(?m)^{re.escape(key)}:\s*(.+)\s*$"
+        m = re.search(pattern, raw)
         if m:
             return m.group(1).strip().strip('"')
         return None
@@ -78,7 +86,7 @@ def _fallback_agent_regex(raw: str) -> dict[str, Any]:
 
     pmap = re.search(r"(?ms)^paths:\s*\n((?:^  [\w]+:\s*.+$\n?)+)", raw)
     if pmap:
-        paths = {}
+        paths: dict[str, str] = {}
         for ln in pmap.group(1).splitlines():
             mm = re.match(r"^\s+([\w]+):\s*(.+)\s*$", ln)
             if mm:
@@ -94,7 +102,21 @@ def _fallback_agent_regex(raw: str) -> dict[str, Any]:
 
 
 def _planned_tool_names_from_text(tools_yaml: str) -> list[str]:
-    return re.findall(r"(?m)^\s*-\s+name:\s*(\S+)\s*$", tools_yaml)
+    pattern = r"(?m)^\s*-\s+name:\s*(\S+)\s*$"
+    return re.findall(pattern, tools_yaml)
+
+
+def _normalize_purpose(purpose_v: Any) -> str | None:
+    if purpose_v is None:
+        return None
+    if isinstance(purpose_v, str):
+        return purpose_v.strip()
+    return str(purpose_v).strip()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AgentConfig
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -117,6 +139,11 @@ class AgentConfig:
     tools_yaml_data: dict[str, Any] = field(default_factory=dict)
     policy_yaml_data: dict[str, Any] = field(default_factory=dict)
     planned_tool_names_fallback: list[str] = field(default_factory=list)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public API
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def list_agents() -> list[str]:
@@ -166,19 +193,18 @@ def load_agent(agent_id: str) -> AgentConfig:
         pol_dict = {}
 
     aid = str(ay_parsed.get("id") or agent_id)
+
     paths_blk = ay_parsed.get("paths")
-    paths_clean = (
-        {str(k): str(v) for k, v in paths_blk.items()}
-        if isinstance(paths_blk, dict)
-        else {}
-    )
+    if isinstance(paths_blk, dict):
+        paths_clean = {str(k): str(v) for k, v in paths_blk.items()}
+    else:
+        paths_clean = {}
 
     tags_blk = ay_parsed.get("tags")
-    tags_list: list[str] = (
-        [str(t) for t in tags_blk]
-        if isinstance(tags_blk, list)
-        else []
-    )
+    if isinstance(tags_blk, list):
+        tags_list = [str(t) for t in tags_blk]
+    else:
+        tags_list = []
 
     display = ay_parsed.get("display_name")
     purpose_v = ay_parsed.get("purpose")
@@ -187,16 +213,14 @@ def load_agent(agent_id: str) -> AgentConfig:
     prompt_rel = paths_clean.get("prompt", "prompt.md")
     examples_rel = paths_clean.get("examples", "examples.md")
 
+    agent_data = dict(ay_parsed) if ay_parsed else {}
+
     return AgentConfig(
         agent_id=aid,
         base_path=base,
         display_name=str(display) if display is not None else None,
         version=str(version_v).strip('"') if version_v is not None else None,
-        purpose=(
-            None
-            if purpose_v is None
-            else (purpose_v.strip() if isinstance(purpose_v, str) else str(purpose_v).strip())
-        ),
+        purpose=_normalize_purpose(purpose_v),
         tags=tags_list,
         paths=paths_clean,
         prompt_md=_read_if_exists(base / prompt_rel),
@@ -204,7 +228,7 @@ def load_agent(agent_id: str) -> AgentConfig:
         policy_yaml=policy_text,
         examples_md=_read_if_exists(base / examples_rel),
         parsed_with_yaml_library=parsed_lib_any,
-        agent_yaml_data=dict(ay_parsed) if ay_parsed else {},
+        agent_yaml_data=agent_data,
         tools_yaml_data=dict(tt_dict),
         policy_yaml_data=dict(pol_dict),
         planned_tool_names_fallback=_planned_tool_names_from_text(tools_text),

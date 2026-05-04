@@ -11,6 +11,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Types
+# ──────────────────────────────────────────────────────────────────────────────
 
 PlanRisk = Literal[
     "level_0",
@@ -29,6 +32,10 @@ PlanStatus = Literal[
     "rejected",
     "failed",
 ]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Models
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 class PlanStep(BaseModel):
@@ -67,6 +74,11 @@ class Plan(BaseModel):
     status: PlanStatus
 
     model_config = ConfigDict(extra="ignore")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Serialization helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def create_plan_id() -> str:

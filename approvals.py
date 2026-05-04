@@ -15,10 +15,15 @@ from plans import Plan, plan_from_dict, plan_to_dict
 
 logger = logging.getLogger("gateway.approvals")
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Paths
+# ──────────────────────────────────────────────────────────────────────────────
 
 _PLANS_ROOT = Path(__file__).resolve().parent / "data" / "plans"
 
 _SUBDIRS = ("pending", "approved", "rejected", "executed")
+
+PlanFolder = Literal["pending", "approved", "rejected", "executed"]
 
 
 def _subdir(name: str) -> Path:
@@ -31,8 +36,13 @@ def _ensure_trees() -> None:
         _subdir(s).mkdir(parents=True, exist_ok=True)
 
 
-def _path_for(plan_id: str, status: Literal["pending", "approved", "rejected", "executed"]) -> Path:
+def _path_for(plan_id: str, status: PlanFolder) -> Path:
     return _subdir(status) / f"{plan_id}.json"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Transitions
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def save_pending_plan(plan: Plan) -> Path:
@@ -41,7 +51,8 @@ def save_pending_plan(plan: Plan) -> Path:
     path = _path_for(plan.plan_id, "pending")
     body = plan_to_dict(plan)
     body["status"] = "pending_approval"
-    path.write_text(json.dumps(body, indent=2, default=str), encoding="utf-8")
+    text = json.dumps(body, indent=2, default=str)
+    path.write_text(text, encoding="utf-8")
     logger.info("approvals | saved pending plan | %s", plan.plan_id)
     return path
 
@@ -95,7 +106,15 @@ def mark_executed(plan_id: str, result: Any | None = None) -> Path:
     return dst
 
 
-def load_plan(plan_id: str, status: Literal["pending", "approved", "rejected", "executed"] = "pending") -> Plan:
+# ──────────────────────────────────────────────────────────────────────────────
+# Queries
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def load_plan(
+    plan_id: str,
+    status: PlanFolder = "pending",
+) -> Plan:
     """Load plan JSON from disk and validate."""
     path = _path_for(plan_id, status)
     if not path.is_file():

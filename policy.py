@@ -11,7 +11,10 @@ from typing import Any, Final
 
 from plans import Plan, PlanStep
 
-# Ordered by increasing sensitivity
+# ──────────────────────────────────────────────────────────────────────────────
+# Risk & heuristics (ordered by increasing sensitivity where applicable)
+# ──────────────────────────────────────────────────────────────────────────────
+
 RISK_LEVELS: Final[tuple[str, ...]] = (
     "level_0",
     "level_1",
@@ -69,11 +72,29 @@ _DESTRUCTIVE_TOOL_SUBSTRINGS: Final[tuple[str, ...]] = (
     "erase",
 )
 
+_DESCRIPTION_CLOUD_MARKERS: Final[tuple[str, ...]] = (
+    "openrouter",
+    "anthropic",
+    "cloud_llm",
+    "gpt-4",
+    "gpt-3",
+    "together.ai",
+)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Decision object
+# ──────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class PolicyDecision:
     allowed: bool
     reasons: list[str] = field(default_factory=list)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Internal checks
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def _risk_index(risk: str) -> int | None:
@@ -110,16 +131,19 @@ def _step_suggests_cloud(step: PlanStep) -> bool:
     if _values_scan_cloud(step.args):
         return True
     desc = step.description.lower()
-    if desc:
-        desc_markers = ("openrouter", "anthropic", "cloud_llm", "gpt-4", "gpt-3", "together.ai")
-        if any(m in desc for m in desc_markers):
-            return True
+    if desc and any(m in desc for m in _DESCRIPTION_CLOUD_MARKERS):
+        return True
     return False
 
 
 def _tool_name_suggests_delete(tool: str) -> bool:
     t = tool.lower()
     return any(m in t for m in _DESTRUCTIVE_TOOL_SUBSTRINGS)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public API
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def evaluate_plan(
@@ -137,11 +161,11 @@ def evaluate_plan(
     _ = active_session  # reserved for session-scoped policy; no side effects.
 
     if _risk_index(plan.risk) is None:
+        joined = ", ".join(RISK_LEVELS)
         return PolicyDecision(
             allowed=False,
             reasons=[
-                f"Unknown risk level {plan.risk!r}; "
-                f"expected one of {', '.join(RISK_LEVELS)}.",
+                f"Unknown risk level {plan.risk!r}; expected one of {joined}.",
             ],
         )
 
@@ -174,9 +198,9 @@ def evaluate_plan(
             if _step_suggests_cloud(step)
         ]
         if offenders:
+            joined = ", ".join(offenders)
             reasons.append(
-                "limits.allow_cloud is false but steps suggest cloud use: "
-                + ", ".join(offenders),
+                f"limits.allow_cloud is false but steps suggest cloud use: {joined}",
             )
 
     if not plan.limits.allow_delete:
@@ -186,19 +210,22 @@ def evaluate_plan(
             if _tool_name_suggests_delete(step.tool)
         ]
         if offenders:
+            joined = ", ".join(offenders)
             reasons.append(
                 "limits.allow_delete is false but destructive tool names present: "
-                + ", ".join(offenders),
+                f"{joined}",
             )
 
     if installed_tools is not None:
         unknown = [
-            step for step in plan.steps if step.tool not in installed_tools
+            step
+            for step in plan.steps
+            if step.tool not in installed_tools
         ]
         if unknown:
+            detail = ", ".join(f"{s.step_id}:{s.tool}" for s in unknown)
             reasons.append(
-                "Steps reference tools not in installed_tools: "
-                + ", ".join(f"{s.step_id}:{s.tool}" for s in unknown),
+                f"Steps reference tools not in installed_tools: {detail}",
             )
 
     return PolicyDecision(allowed=(len(reasons) == 0), reasons=reasons)
