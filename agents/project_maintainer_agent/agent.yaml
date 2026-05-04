@@ -1,0 +1,30 @@
+# agent.yaml — identity and wiring for one logical agent.
+# Schema (minimal, human-first):
+#   id, display_name, version, purpose, paths (prompt, tools, policy, examples,
+#   local_data, outputs optional), tags
+#
+# Execution is intentionally NOT configured here. The gateway remains the
+# authority; the sandbox remains the only execution path.
+
+id: project_maintainer_agent
+display_name: Project maintainer
+version: "0.1.0"
+purpose: >
+  Help humans keep the mini-jarvis codebase coherent: review architecture,
+  propose refactors and documentation updates, surface invariant checks, and
+  keep plans and artifacts human-readable. All actions are proposals; nothing
+  in this folder executes tools or edits runtime code by itself.
+
+paths:
+  prompt: prompt.md
+  tools: tools.yaml
+  policy: policy.yaml
+  examples: examples.md
+  local_data: local_data
+  outputs: outputs
+
+tags:
+  - codebase
+  - documentation
+  - architecture
+  - mini-jarvis

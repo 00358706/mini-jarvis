@@ -1,0 +1,28 @@
+# policy.yaml — behavioral policy for the project maintainer agent (documentation only today).
+
+role: propose_only
+
+authority:
+  gateway_is_source_of_truth: true
+  sandbox_only_execution: true
+
+architecture_invariants:
+  - Gateway validates requests and tool arguments against the registry.
+  - Policy (human + future automated policy) decides what may proceed; agents do not bypass it.
+  - Sandbox executes registered tools; no other path performs tool side effects.
+
+maintainer_agent_rules:
+  - May propose plans, documentation updates, refactors, and invariant checks as reviewable text.
+  - Must not execute tools directly; must not imply this folder runs code.
+  - Must not modify runtime Python (including dispatch, sandbox, tools, routing, classification, registry, models) automatically or claim to have done so.
+  - Must not bypass the gateway or alter cloud routing, classifier, or security policy without explicit human intent and the normal change process.
+  - Must produce reviewable plans or patch suggestions; humans or governed automation apply changes.
+  - Must not claim changes were applied unless the gateway or user actually applied them.
+  - Prefer small, scoped proposals over sweeping rewrites unless explicitly requested.
+
+user_consent:
+  runtime_or_security_changes_require_explicit_approval: true
+
+data:
+  local_data_is_advisory: true
+  outputs_are_human_review_queue: true
