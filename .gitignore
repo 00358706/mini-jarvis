@@ -1,0 +1,22 @@
+# secrets
+.env
+secrets/
+*.key
+*.pem
+
+# runtime/data
+runtime/
+data/
+logs/
+*.log
+*.jsonl
+
+# Python junk
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# generated/pending tools
+tools_pending/
+tools_generated/
