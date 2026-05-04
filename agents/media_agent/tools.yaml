@@ -1,0 +1,44 @@
+# tools.yaml — which registry tools this agent may mention in proposed plans.
+# Schema (minimal):
+#   description: string    # how this file relates to the formal ToolDefinition registry
+#   allowed_tools:          # subset the planner is permitted to reference by name
+#     - name: string         # must match a tool name in the gateway registry
+#       version: string|null # if null, gateway resolves default/latest installed
+#       rationale: string   # why this agent may propose this tool
+#   constraints:            # invariants for future loaders (documentation only today)
+#     agents_must_not_execute: bool
+#     proposals_reference_registry_only: bool
+#
+# Agents do not call endpoints or run sandbox code. They only emit plans whose
+# steps name tools that already exist in the registry.
+
+description: >
+  Allowlist for plan proposals. Tool names and versions must exist in the
+  gateway tool registry (installed state) before any plan step can be executed.
+
+allowed_tools:
+  - name: radarr_search
+    version: v1
+    rationale: Discover whether a movie exists or matches before add.
+  - name: radarr_add
+    version: v1
+    rationale: Propose adding a monitored title after search context.
+  - name: sonarr_search
+    version: v1
+    rationale: Discover series before proposing add.
+  - name: sonarr_add
+    version: v1
+    rationale: Propose adding a series after search context.
+  - name: sabnzbd_queue
+    version: v1
+    rationale: Inspect queue when user asks about download state.
+  - name: sabnzbd_pause
+    version: v1
+    rationale: Propose pausing when user explicitly wants downloads stopped.
+  - name: sabnzbd_resume
+    version: v1
+    rationale: Propose resuming when user explicitly wants downloads started.
+
+constraints:
+  agents_must_not_execute: true
+  proposals_reference_registry_only: true

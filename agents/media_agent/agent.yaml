@@ -1,0 +1,38 @@
+# agent.yaml — identity and wiring for one logical agent.
+# Schema (minimal, human-first):
+#   id: string            # stable slug, unique under agents/
+#   display_name: string
+#   version: string        # semver or opaque tag for this folder
+#   purpose: string        # one paragraph: what this agent is for
+#   paths:                 # all paths relative to this agent directory
+#     prompt: string       # e.g. prompt.md
+#     tools: string        # e.g. tools.yaml
+#     policy: string       # e.g. policy.yaml
+#     examples: string     # e.g. examples.md
+#     local_data: string   # directory for agent-local reference data (read-only intent)
+#   tags: [string]         # optional, for future discovery
+#
+# Execution is intentionally NOT configured here. The gateway remains the
+# authority; the sandbox remains the only execution path. This file only
+# describes configuration for a future planner that proposes tool use.
+
+id: media_agent
+display_name: Media assistant
+version: "0.1.0"
+purpose: >
+  Help users reason about movies, TV, and downloads. Propose ordered plans
+  that reference only registry tool names; never assume tools run inside
+  this agent.
+
+paths:
+  prompt: prompt.md
+  tools: tools.yaml
+  policy: policy.yaml
+  examples: examples.md
+  local_data: local_data
+
+tags:
+  - media
+  - radarr
+  - sonarr
+  - sabnzbd

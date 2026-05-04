@@ -1,0 +1,34 @@
+# policy.yaml — behavioral and safety policy for plan proposals (not runtime enforcement here).
+# Schema (minimal):
+#   role: string                    # e.g. propose_only
+#   authority:
+#     gateway_is_source_of_truth: bool
+#     sandbox_only_execution: bool
+#   proposal_rules:
+#     - string                      # bullet rules the planner should follow
+#   user_consent:
+#     destructive_requires_explicit_user_intent: bool
+#   data:
+#     local_data_is_advisory: bool  # files under local_data/ are hints, not secrets store
+#
+# This file documents intent for a future gateway-enforced policy layer.
+# It does not change dispatch, routing, or sandbox behavior today.
+
+role: propose_only
+
+authority:
+  gateway_is_source_of_truth: true
+  sandbox_only_execution: true
+
+proposal_rules:
+  - Every plan step must name a tool present in tools.yaml and in the registry.
+  - Do not fabricate tool names, endpoints, or arguments outside each tool's input schema.
+  - Prefer read/search tools before write/add or pause/resume.
+  - State assumptions and ask for missing required fields instead of guessing secrets.
+  - Never claim a tool has run; use language like "proposed step" or "recommended sequence".
+
+user_consent:
+  destructive_requires_explicit_user_intent: true
+
+data:
+  local_data_is_advisory: true
