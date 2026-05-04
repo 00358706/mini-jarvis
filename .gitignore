@@ -20,3 +20,9 @@ venv/
 # generated/pending tools
 tools_pending/
 tools_generated/
+
+# Runtime plan state
+data/plans/**/*.json
+
+# Keep folder structure
+!data/plans/**/.gitkeep
