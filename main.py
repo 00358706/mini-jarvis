@@ -72,6 +72,7 @@ from approvals import (
     approve_plan,
     list_pending_plans,
     load_plan,
+    mark_executed,
     reject_plan,
     save_pending_plan,
 )
@@ -86,6 +87,7 @@ from models import (
 )
 from plans import Plan
 from policy import evaluate_plan
+from tools import run_installed_tool
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -242,7 +244,7 @@ async def ingest(request: IngestRequest):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Plan API — non-breaking planning/approval layer. No execution.
+# Plan API — planning, approval, and approved-only execution (registry + sandbox).
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -346,6 +348,81 @@ async def plans_reject(plan_id: str, req: PlanRejectRequest):
         "plan_id": plan_id,
         "reason": req.reason,
     }
+
+
+@app.post("/plans/{plan_id}/execute")
+async def plans_execute(plan_id: str):
+    """
+    Plan API — execute an **approved** plan only: load from `data/plans/approved/`,
+    re-check policy, then run each step via `run_installed_tool` (registry + schema + sandbox).
+    Does not call models. Pending or proposed plans are not executable here.
+    """
+    try:
+        plan = load_plan(plan_id, status="approved")
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plan is not in approved state or was not found under approved plans.",
+        ) from None
+
+    if plan.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plan status must be approved to execute.",
+        )
+
+    decision = evaluate_plan(plan, installed_tools=_installed_tool_names())
+    if not decision.allowed:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "status": "policy_rejected",
+                "plan_id": plan_id,
+                "reasons": decision.reasons,
+            },
+        )
+
+    await audit.append(
+        kind="plan",
+        input_summary=f"Plan execution started: {plan_id}",
+        result_summary="status=executing",
+    )
+
+    step_results: list[dict] = []
+    for step in plan.steps:
+        tool_result = await run_installed_tool(step.tool, step.args)
+        step_payload = {
+            "step_id": step.step_id,
+            "tool": step.tool,
+            "status": "ok" if tool_result.success else "error",
+            "result": tool_result.model_dump(mode="json"),
+        }
+        step_results.append(step_payload)
+        await audit.append(
+            kind="plan",
+            input_summary=f"Plan step {step.step_id} tool={step.tool} plan={plan_id}",
+            result_summary=(
+                "ok"
+                if tool_result.success
+                else (tool_result.error or "error")[:200]
+            ),
+        )
+
+    response_body = {
+        "status": "executed",
+        "plan_id": plan_id,
+        "steps": step_results,
+    }
+
+    mark_executed(plan_id, result=response_body)
+
+    await audit.append(
+        kind="plan",
+        input_summary=f"Plan execution completed: {plan_id}",
+        result_summary="status=executed",
+    )
+
+    return response_body
 
 
 # ──────────────────────────────────────────────────────────────────────────────

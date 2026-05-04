@@ -496,3 +496,54 @@ async def execute(envelope: NormalisedEnvelope) -> ToolResult:
             update={"sandbox_elapsed": time.monotonic() - start},
         )
     return result
+
+
+async def run_installed_tool(tool_name: str, args: dict[str, Any]) -> ToolResult:
+    """
+    Run one installed registry tool by explicit name and args.
+
+    Same gate as ``execute()`` after intent resolution: ``get_installed`` →
+    ``validate_args_against_schema`` → ``sandbox.run``. Does not parse ingest text.
+    """
+    t_exec = time.perf_counter()
+    registry_entry = reg.get_installed(tool_name)
+    if registry_entry is None:
+        logger.warning("tools | '%s' not installed in registry (direct call)", tool_name)
+        d_ms, in_w, to = _exec_meta_ms(t_exec)
+        return ToolResult(
+            tool_name=tool_name,
+            success=False,
+            error=(
+                f"Tool '{tool_name}' is not installed. "
+                "Use POST /tools/propose → /tools/approve → /tools/install."
+            ),
+            execution_duration_ms=d_ms,
+            executed_in_sandbox_worker=in_w,
+            sandbox_timeout=to,
+        )
+
+    ok, verr = validate_args_against_schema(args, registry_entry.input_schema)
+    if not ok:
+        logger.warning(
+            "tools | schema validation failed (direct call) | %s | %s",
+            tool_name,
+            verr,
+        )
+        d_ms, in_w, to = _exec_meta_ms(t_exec)
+        return ToolResult(
+            tool_name=tool_name,
+            success=False,
+            error=verr or "Input validation failed.",
+            execution_duration_ms=d_ms,
+            executed_in_sandbox_worker=in_w,
+            sandbox_timeout=to,
+        )
+
+    logger.info("tools | dispatching %s via sandbox (direct) | args=%r", tool_name, args)
+    start = time.monotonic()
+    result = await sandbox.run(tool_name=tool_name, args=args)
+    if result.sandbox_elapsed is None:
+        result = result.model_copy(
+            update={"sandbox_elapsed": time.monotonic() - start},
+        )
+    return result
