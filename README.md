@@ -8,7 +8,7 @@ A small **local-first gateway** that ingests multimodal requests, classifies int
 
 **Execution-isolated gateway** with a separate **agent configuration layer** (under `agents/`). The gateway owns validation, routing, and execution; `agents/` holds human-readable workflow configuration (purpose, prompts, allowlisted tool names, policy text, examples, optional local data) for future planners. **Nothing under `agents/` runs tools or touches the network today.**
 
-**Next architecture milestone: Plan + Policy + Approval layer** — `plans.py`, `policy.py`, and `approvals.py` add structured plans, policy evaluation, and on-disk plan workflow under `data/plans/`. `agent_loader.py` reads agent folder metadata. **`dispatch.process()` is unchanged**; these are planning and filesystem primitives until explicitly wired to `/ingest`.
+**Next architecture milestone: Plan + Policy + Approval layer.** `plans.py` defines structured plan models; `policy.py` evaluates proposed plans; `approvals.py` stores pending, approved, rejected, and executed plan JSON under `data/plans/`; `agent_loader.py` reads agent folder metadata. The **`/plans/*`** routes are a non-breaking planning and approval API (they do not execute tools or call the sandbox). **`dispatch.process()`** is unchanged for now.
 
 ---
 
@@ -94,7 +94,7 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 
 | Module | Role |
 |--------|------|
-| `main.py` | FastAPI app, auth, `/ingest`, `/health`, `/logs`, `/tools`, lifecycle endpoints |
+| `main.py` | FastAPI app, auth, `/ingest`, `/plans/*`, `/health`, `/logs`, `/tools`, lifecycle endpoints |
 | `ingestion.py` | Normalise ingest payloads |
 | `classification.py` | Intent → `RoutingTarget` |
 | `dispatch.py` | Orchestrate classify → route → execute → failure notes → audit |
@@ -106,10 +106,10 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `http_allowlist.py` | Per-request URL policy for tool HTTP calls |
 | `audit.py` | Structured audit log |
 | `config.py` | Environment-backed settings |
-| `plans.py` | Structured plan models (no execution) |
-| `policy.py` | Evaluate proposed plans against policy (no execution) |
-| `approvals.py` | Plan JSON files: `data/plans/{pending,approved,rejected,executed}/` |
-| `agent_loader.py` | Load metadata from `agents/<id>/` (no code execution from agent dirs) |
+| `plans.py` | Defines structured plan models (no execution) |
+| `policy.py` | Evaluates proposed plans against policy (no execution) |
+| `approvals.py` | Stores pending / approved / rejected / executed plan JSON under `data/plans/` |
+| `agent_loader.py` | Reads agent folder metadata from `agents/<id>/` (no code execution from agent dirs) |
 
 Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack (human → gateway → … → sandbox → tools → audit).
 
