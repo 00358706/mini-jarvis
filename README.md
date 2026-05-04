@@ -182,6 +182,14 @@ curl -H "X-API-Key: your-secret-key" "http://localhost:8000/logs?limit=50"
 curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 ```
 
+### Plan API smoke test
+
+- Start the gateway first with `python main.py`.
+- Run `powershell -ExecutionPolicy Bypass -File .\scripts\test_plan_api.ps1`.
+- The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
+- It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
+- It does not execute tools or call the sandbox.
+
 ---
 
 ## Security invariants
