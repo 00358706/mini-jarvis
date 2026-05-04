@@ -64,9 +64,17 @@ from datetime import datetime, timezone
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 import audit
 import registry as reg
+from approvals import (
+    approve_plan,
+    list_pending_plans,
+    load_plan,
+    reject_plan,
+    save_pending_plan,
+)
 from config import cfg
 from dispatch import process
 from ingestion import normalise
@@ -76,6 +84,8 @@ from models import (
     ToolApprovalRequest,
     ToolProposal,
 )
+from plans import Plan
+from policy import evaluate_plan
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -87,6 +97,14 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("gateway")
+
+
+def _installed_tool_names() -> set[str]:
+    return {t.name for t in reg.installed_tools()}
+
+
+class PlanRejectRequest(BaseModel):
+    reason: str | None = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -221,6 +239,113 @@ async def ingest(request: IngestRequest):
         timestamp=datetime.now(timezone.utc),
         envelope=envelope,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Plan API — non-breaking planning/approval layer. No execution.
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@app.post("/plans/propose")
+async def plans_propose(plan: Plan):
+    """
+    Plan API — non-breaking planning/approval layer. No execution.
+
+    Policy-check a structured plan; optionally persist as pending approval.
+    Does not call sandbox, tools, or models.
+    """
+    decision = evaluate_plan(plan, installed_tools=_installed_tool_names())
+    policy_out = {"allowed": decision.allowed, "reasons": decision.reasons}
+
+    if not decision.allowed:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "status": "policy_rejected",
+                "plan_id": plan.plan_id,
+                "policy": policy_out,
+            },
+        )
+
+    if plan.requires_approval:
+        save_pending_plan(plan)
+        await audit.append(
+            kind="plan",
+            input_summary=f"Plan proposed: {plan.plan_id}",
+            result_summary="status=pending_approval",
+        )
+        return {
+            "status": "pending_approval",
+            "plan_id": plan.plan_id,
+            "policy": policy_out,
+        }
+
+    return {
+        "status": "policy_allowed_not_executed",
+        "plan_id": plan.plan_id,
+        "policy": policy_out,
+        "note": "Plan execution is not wired into this endpoint yet.",
+    }
+
+
+@app.get("/plans/pending")
+async def plans_pending_list():
+    """Plan API — non-breaking planning/approval layer. No execution."""
+    plan_ids = list_pending_plans()
+    return {"count": len(plan_ids), "plans": plan_ids}
+
+
+@app.get("/plans/pending/{plan_id}")
+async def plans_pending_get(plan_id: str):
+    """Plan API — non-breaking planning/approval layer. No execution."""
+    try:
+        p = load_plan(plan_id, status="pending")
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pending plan {plan_id!r} not found.",
+        ) from None
+    return p.model_dump(mode="json")
+
+
+@app.post("/plans/{plan_id}/approve")
+async def plans_approve(plan_id: str):
+    """Plan API — non-breaking planning/approval layer. No execution."""
+    try:
+        approve_plan(plan_id)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pending plan {plan_id!r} not found.",
+        ) from None
+    await audit.append(
+        kind="plan",
+        input_summary=f"Plan approved: {plan_id}",
+        result_summary="status=approved",
+    )
+    return {"status": "approved", "plan_id": plan_id}
+
+
+@app.post("/plans/{plan_id}/reject")
+async def plans_reject(plan_id: str, req: PlanRejectRequest):
+    """Plan API — non-breaking planning/approval layer. No execution."""
+    try:
+        reject_plan(plan_id, reason=req.reason)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pending plan {plan_id!r} not found.",
+        ) from None
+    await audit.append(
+        kind="plan",
+        input_summary=f"Plan rejected: {plan_id}",
+        result_summary=f"status=rejected reason={req.reason or 'n/a'}",
+    )
+    return {
+        "status": "rejected",
+        "plan_id": plan_id,
+        "reason": req.reason,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────

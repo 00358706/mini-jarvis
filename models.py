@@ -135,7 +135,16 @@ class ProposedToolCode(BaseModel):
 
 
 class AuditEntry(BaseModel):
-    kind: Literal["ingest", "route", "tool", "drop", "error", "event", "lifecycle"]
+    kind: Literal[
+        "ingest",
+        "route",
+        "tool",
+        "drop",
+        "error",
+        "event",
+        "lifecycle",
+        "plan",
+    ]
     input: str
     decision: str | None = None
     route: str | None = None

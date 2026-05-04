@@ -39,7 +39,16 @@ _lock: asyncio.Lock = asyncio.Lock()
 
 async def append(
     *,
-    kind: Literal["ingest", "route", "tool", "drop", "error", "event", "lifecycle"],
+    kind: Literal[
+        "ingest",
+        "route",
+        "tool",
+        "drop",
+        "error",
+        "event",
+        "lifecycle",
+        "plan",
+    ],
     input_summary: str,
     decision: str | None = None,
     route: str | None = None,
