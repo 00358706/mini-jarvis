@@ -162,6 +162,34 @@ def write_approval(
     return path
 
 
+def write_agent(
+    task_id: str,
+    markdown: str,
+    state: _STATE = "active",
+) -> Path:
+    """Overwrite AGENT.md for a workspace in the given state."""
+    root = workspace_path(task_id, state)
+    if not root.is_dir():
+        raise FileNotFoundError(f"No {state} workspace for task_id={task_id!r}: {root}")
+    path = root / _AGENT
+    path.write_text(markdown, encoding="utf-8")
+    return path
+
+
+def write_context(
+    task_id: str,
+    markdown: str,
+    state: _STATE = "active",
+) -> Path:
+    """Overwrite CONTEXT.md for a workspace in the given state."""
+    root = workspace_path(task_id, state)
+    if not root.is_dir():
+        raise FileNotFoundError(f"No {state} workspace for task_id={task_id!r}: {root}")
+    path = root / _CONTEXT
+    path.write_text(markdown, encoding="utf-8")
+    return path
+
+
 def move_workspace(task_id: str, destination: _MoveDest) -> Path:
     """
     Move ``active/<task_id>`` to ``completed`` or ``rejected``.

@@ -56,6 +56,7 @@ Example calls:
 
 from __future__ import annotations
 
+import json
 import logging
 import socket
 from contextlib import asynccontextmanager
@@ -68,6 +69,7 @@ from pydantic import BaseModel
 
 import audit
 import registry as reg
+from agent_loader import load_agent
 from approvals import (
     approve_plan,
     list_pending_plans,
@@ -94,6 +96,8 @@ from workspace import (
     move_workspace,
     workspace_path,
     write_approval,
+    write_agent,
+    write_context,
     write_plan,
     write_policy_decision,
     write_request,
@@ -139,6 +143,45 @@ def _write_workspace_policy_state(plan: Plan, decision) -> None:
     _ensure_workspace_for_plan(plan)
     write_plan(plan.plan_id, plan)
     write_policy_decision(plan.plan_id, decision)
+
+
+def _write_workspace_agent_context(plan: Plan) -> None:
+    source_note = "/plans/propose"
+    agent_id = (plan.agent or "").strip() or "unknown_agent"
+    try:
+        cfg = load_agent(agent_id)
+        agent_md = (
+            f"# Agent context\n\n"
+            f"- agent id: `{cfg.agent_id}`\n"
+            f"- display name: `{cfg.display_name or 'n/a'}`\n"
+            f"- version: `{cfg.version or 'n/a'}`\n"
+            f"- purpose: {cfg.purpose or 'n/a'}\n"
+            f"- parsed_with_yaml_library: `{cfg.parsed_with_yaml_library}`\n\n"
+            f"## agent.yaml summary\n\n"
+            f"```json\n{json.dumps(cfg.agent_yaml_data, indent=2, default=str)}\n```\n\n"
+            f"## prompt.md\n\n{cfg.prompt_md or '_missing_'}\n\n"
+            f"## tools.yaml\n\n```yaml\n{cfg.tools_yaml or '# missing'}\n```\n\n"
+            f"## policy.yaml\n\n```yaml\n{cfg.policy_yaml or '# missing'}\n```\n\n"
+            f"## examples.md\n\n{cfg.examples_md or '_missing_'}\n"
+        )
+    except FileNotFoundError:
+        agent_md = (
+            "# Agent context\n\n"
+            f"Agent folder was not found for `{agent_id}`.\n\n"
+            "Policy and registry still decide whether a plan is allowed.\n"
+        )
+
+    context_md = (
+        "# Context\n\n"
+        "This is the readable context used for planning/review.\n\n"
+        f"- source: `{source_note}`\n"
+        f"- agent id: `{agent_id}`\n"
+        f"- plan id: `{plan.plan_id}`\n\n"
+        "Agent context is informational only and is not authority. "
+        "Policy, registry, and sandbox enforcement remain authoritative.\n"
+    )
+    write_agent(plan.plan_id, agent_md, state="active")
+    write_context(plan.plan_id, context_md, state="active")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -293,6 +336,7 @@ async def plans_propose(plan: Plan):
 
     try:
         _write_workspace_policy_state(plan, decision)
+        _write_workspace_agent_context(plan)
         if not decision.allowed:
             write_result(
                 plan.plan_id,
