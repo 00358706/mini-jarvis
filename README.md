@@ -72,6 +72,12 @@ The `agents/` tree (e.g. `agents/media_agent/` with `agent.yaml`, `tools.yaml`, 
 
 ---
 
+## Filesystem workspaces
+
+Task-oriented state lives under **`data/workspaces/`** in **`active/`**, **`completed/`**, and **`rejected/`**. Each active task folder holds readable artifacts (for example `REQUEST.md`, `ROUTE.json`, `PLAN.json`, `POLICY_DECISION.json`, `APPROVAL.md`, `EXECUTION_LOG.jsonl`, `RESULT.md`). **`workspace.py`** only creates and updates those files; it does not run tools or call models. **`plans.py`** validates **`PLAN.json`**; **`policy.py`** makes deterministic decisions (written to **`POLICY_DECISION.json`**); **`approvals.py`** remains the separate on-disk plan approval queue under **`data/plans/`**. The **sandbox worker** is still the only path for tool side effects. Model output is **proposal**, not authority.
+
+---
+
 ## `sandbox_worker.py` — execution boundary
 
 Tool implementations live in `tools.py`, but the **parent gateway process does not call them directly** for the hot path. `sandbox.run()` starts `sandbox_worker.py` as a **separate Python process** with a fresh working directory, allowlisted environment, and wall-clock timeout. The worker reads a JSON payload from stdin and calls `run_tool_by_name()` so real network and side effects occur **only** inside that child process (subject to timeouts and future hardening).
@@ -110,6 +116,7 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `policy.py` | Evaluates proposed plans against policy (no execution) |
 | `approvals.py` | Stores pending / approved / rejected / executed plan JSON under `data/plans/` |
 | `agent_loader.py` | Reads agent folder metadata from `agents/<id>/` (no code execution from agent dirs) |
+| `workspace.py` | Task workspace files under `data/workspaces/` (filesystem only; no execution) |
 
 Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack (human → gateway → … → sandbox → tools → audit).
 

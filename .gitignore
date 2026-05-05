@@ -6,10 +6,26 @@ secrets/
 
 # runtime/data
 runtime/
-data/
 logs/
 *.log
 *.jsonl
+
+# data/ — ignore contents by default; track selected structure
+data/*
+!data/plans/
+!data/workspaces/
+
+# Runtime plan JSON (keep optional .gitkeep)
+data/plans/**/*.json
+!data/plans/**/.gitkeep
+
+# Task workspaces (keep .gitkeep per state folder)
+data/workspaces/active/*
+!data/workspaces/active/.gitkeep
+data/workspaces/completed/*
+!data/workspaces/completed/.gitkeep
+data/workspaces/rejected/*
+!data/workspaces/rejected/.gitkeep
 
 # Python junk
 __pycache__/
@@ -20,9 +36,3 @@ venv/
 # generated/pending tools
 tools_pending/
 tools_generated/
-
-# Runtime plan state
-data/plans/**/*.json
-
-# Keep folder structure
-!data/plans/**/.gitkeep

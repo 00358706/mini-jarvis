@@ -10,6 +10,17 @@ Human-readable view of how responsibilities stack. Lower layers do not replace g
 
 3. **Agent filesystem context** — Folders under `agents/<agent_id>/` (`agent.yaml`, `tools.yaml`, prompts, examples, local notes). These are **workflow and persona configuration**, not microservices. Agents **do not own** tools and **do not execute** them.
 
+3b. **Task workspace (on disk)** — Under `data/workspaces/`:
+
+   - `active/<task_id>/` — in-flight task folder with human-readable artifacts, for example:
+     - `REQUEST.md`, `ROUTE.json`, `AGENT.md`, `CONTEXT.md`
+     - `PLAN.json` (structured plan; validate with `plans.py`)
+     - `POLICY_DECISION.json` (outcome of `policy.py`)
+     - `APPROVAL.md`, `EXECUTION_LOG.jsonl`, `RESULT.md`
+   - `completed/<task_id>/` and `rejected/<task_id>/` — terminal locations after `workspace.move_workspace`.
+
+   **`workspace.py`** only reads/writes these files; it does not execute tools or enforce permissions.
+
 4. **Planner / model** — Produces **proposals**: natural language, structured plans (`plans.py`), or suggested edits. Model output is **not** authority; it is input to policy and human review.
 
 5. **Policy** — Evaluates proposed plans (`policy.py`): risk, approvals, cloud/delete flags, consistency with installed tools when that set is provided. No tool execution, no registry writes.
@@ -36,4 +47,8 @@ Human-readable view of how responsibilities stack. Lower layers do not replace g
 
 - **Tool creation is a lifecycle, not auto-run.** New tools are proposed, reviewed, approved, and installed into the registry before the sandbox may invoke them.
 
-- **LoopLM and LoRA** (and similar) are **future improvements** to planners or models only. They are not additional permission layers and do not bypass the gateway, registry, policy, or sandbox.
+- **LoopLM / Ouro (future)** — A **local** planner or reasoner that can read agent folder + workspace context (`REQUEST.md`, `CONTEXT.md`, etc.) and **write** `PLAN.json` **proposals**. It does **not** enforce permissions, approval, or registry rules; the gateway, policy, and humans remain authoritative.
+
+- **LoRA (future)** — **Adapter-style** tuning to improve how a planner follows your schemas, tools, examples, and local workflows. It shapes **familiarity and style**, not **who is allowed to run what**. It does **not** replace policy, approvals, or the sandbox.
+
+- **LoopLM, Ouro, and LoRA** must not be treated as permission layers. They do not bypass the gateway, registry, policy, or sandbox.
