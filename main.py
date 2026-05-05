@@ -89,9 +89,11 @@ from plans import Plan
 from policy import evaluate_plan
 from tools import run_installed_tool
 from workspace import (
+    append_execution_log,
     create_workspace,
     move_workspace,
     workspace_path,
+    write_approval,
     write_plan,
     write_policy_decision,
     write_request,
@@ -404,6 +406,22 @@ async def plans_approve(plan_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pending plan {plan_id!r} not found.",
         ) from None
+    try:
+        write_approval(
+            plan_id,
+            "# Approval\n\nStatus: approved\n",
+            state="active",
+        )
+    except FileNotFoundError:
+        # Workspace mirror is optional for lifecycle endpoints.
+        pass
+    except Exception as exc:
+        logger.warning("plans/approve workspace update failed for %s: %s", plan_id, exc)
+        await audit.append(
+            kind="plan",
+            input_summary=f"Workspace update failed on approve: {plan_id}",
+            result_summary=f"warning={str(exc)[:200]}",
+        )
     await audit.append(
         kind="plan",
         input_summary=f"Plan approved: {plan_id}",
@@ -422,6 +440,25 @@ async def plans_reject(plan_id: str, req: PlanRejectRequest):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pending plan {plan_id!r} not found.",
         ) from None
+    try:
+        write_approval(
+            plan_id,
+            f"# Approval\n\nStatus: rejected\n\nReason: {req.reason or 'n/a'}\n",
+            state="active",
+        )
+        write_result(plan_id, "# Result\n\nPlan rejected.\n")
+        if _workspace_exists_active(plan_id):
+            move_workspace(plan_id, "rejected")
+    except FileNotFoundError:
+        # No workspace to mirror; API success is still valid.
+        pass
+    except Exception as exc:
+        logger.warning("plans/reject workspace update failed for %s: %s", plan_id, exc)
+        await audit.append(
+            kind="plan",
+            input_summary=f"Workspace update failed on reject: {plan_id}",
+            result_summary=f"warning={str(exc)[:200]}",
+        )
     await audit.append(
         kind="plan",
         input_summary=f"Plan rejected: {plan_id}",
@@ -482,6 +519,25 @@ async def plans_execute(plan_id: str):
             "result": tool_result.model_dump(mode="json"),
         }
         step_results.append(step_payload)
+        try:
+            append_execution_log(
+                plan_id,
+                {
+                    "step_id": step.step_id,
+                    "tool": step.tool,
+                    "status": step_payload["status"],
+                    "result": step_payload["result"],
+                },
+            )
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            logger.warning("plans/execute workspace log append failed for %s: %s", plan_id, exc)
+            await audit.append(
+                kind="plan",
+                input_summary=f"Workspace update failed on execute step: {plan_id}",
+                result_summary=f"warning={str(exc)[:200]}",
+            )
         await audit.append(
             kind="plan",
             input_summary=f"Plan step {step.step_id} tool={step.tool} plan={plan_id}",
@@ -499,6 +555,30 @@ async def plans_execute(plan_id: str):
     }
 
     mark_executed(plan_id, result=response_body)
+    try:
+        ok_steps = sum(1 for s in step_results if s["status"] == "ok")
+        err_steps = len(step_results) - ok_steps
+        write_result(
+            plan_id,
+            (
+                "# Result\n\n"
+                f"Plan executed.\n\n"
+                f"- Steps total: {len(step_results)}\n"
+                f"- Steps ok: {ok_steps}\n"
+                f"- Steps error: {err_steps}\n"
+            ),
+        )
+        if _workspace_exists_active(plan_id):
+            move_workspace(plan_id, "completed")
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        logger.warning("plans/execute workspace finalize failed for %s: %s", plan_id, exc)
+        await audit.append(
+            kind="plan",
+            input_summary=f"Workspace update failed on execute finalize: {plan_id}",
+            result_summary=f"warning={str(exc)[:200]}",
+        )
 
     await audit.append(
         kind="plan",

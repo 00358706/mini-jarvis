@@ -74,9 +74,9 @@ The `agents/` tree (e.g. `agents/media_agent/` with `agent.yaml`, `tools.yaml`, 
 
 ## Filesystem workspaces
 
-- `data/workspaces/active/`
-- `data/workspaces/completed/`
-- `data/workspaces/rejected/`
+- `data/workspaces/active/` while plans are proposed/approved.
+- `data/workspaces/rejected/` when plans are rejected.
+- `data/workspaces/completed/` after plan execution finishes.
 - `workspace.py` manages readable files only.
 - `plans.py` validates `PLAN.json`.
 - `policy.py` writes and represents deterministic decisions.
