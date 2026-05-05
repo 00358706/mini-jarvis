@@ -16,6 +16,9 @@ description: >
   Allowlist for plan proposals. Tool names and versions must exist in the
   gateway tool registry (installed state) before any plan step can be executed.
 
+enforcement:
+  mode: strict
+
 allowed_tools:
   - name: radarr_search
     version: v1
@@ -32,12 +35,6 @@ allowed_tools:
   - name: sabnzbd_queue
     version: v1
     rationale: Inspect queue when user asks about download state.
-  - name: sabnzbd_pause
-    version: v1
-    rationale: Propose pausing when user explicitly wants downloads stopped.
-  - name: sabnzbd_resume
-    version: v1
-    rationale: Propose resuming when user explicitly wants downloads started.
 
 constraints:
   agents_must_not_execute: true

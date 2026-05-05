@@ -62,22 +62,30 @@ if ($RespAllowed.status -eq "pending_approval") {
 Write-Host ""
 Write-Host "--- Case 2: candidate blocked tool (sabnzbd_pause) ---"
 $BodyBlocked = New-PlanBody -PlanId $BlockedPlanId -ToolName "sabnzbd_pause"
+$BlockedRejected = $false
 try {
     $RespBlocked = Invoke-RestMethod -Uri "$BaseUrl/plans/propose" -Method Post -Headers $Headers -Body $BodyBlocked
     $RespBlocked | ConvertTo-Json -Depth 10
+    Write-Host "ERROR: blocked case was accepted unexpectedly."
+    # Cleanup pending item if created.
     if ($RespBlocked.status -eq "pending_approval") {
-        Write-Host "NOTE: media_agent appears to allow sabnzbd_pause (or tools allowlist is non-strict here)."
-        # Cleanup pending item if created.
         $RejectBody2 = @{ reason = "agent tool policy test cleanup" } | ConvertTo-Json
         Invoke-RestMethod -Uri "$BaseUrl/plans/$BlockedPlanId/reject" -Method Post -Headers $Headers -Body $RejectBody2 | Out-Null
     }
 } catch {
     $resp = $_.Exception.Response
     if ($resp -and $resp.StatusCode.value__ -eq 400) {
-        Write-Host "Blocked case rejected with HTTP 400 (expected when tool is not in agent allowed_tools)."
+        $BlockedRejected = $true
+        Write-Host "Blocked case rejected with HTTP 400 (expected in strict mode)."
     } else {
         throw
     }
+}
+
+if ($BlockedRejected) {
+    Write-Host "Case 2 result: PASS (rejection is expected)."
+} else {
+    Write-Host "Case 2 result: FAIL (expected rejection)."
 }
 
 Write-Host ""

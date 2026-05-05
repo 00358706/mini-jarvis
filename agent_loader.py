@@ -235,14 +235,17 @@ def load_agent(agent_id: str) -> AgentConfig:
     )
 
 
-def get_agent_allowed_tools(agent_id: str) -> set[str] | None:
+def get_agent_tool_policy(agent_id: str) -> dict[str, Any] | None:
     """
-    Return agent allowlisted tool names from tools.yaml, or None if unavailable.
+    Return agent tool policy from tools.yaml, or None if unavailable.
 
-    Supports:
+    Supports allowed_tools:
       allowed_tools:
         - name: radarr_search
         - radarr_add
+    and enforcement:
+      enforcement:
+        mode: strict
     """
     try:
         cfg = load_agent(agent_id)
@@ -250,20 +253,24 @@ def get_agent_allowed_tools(agent_id: str) -> set[str] | None:
         return None
 
     data = cfg.tools_yaml_data if isinstance(cfg.tools_yaml_data, dict) else {}
-    raw = data.get("allowed_tools")
-    if raw is None:
-        return None
-    if not isinstance(raw, list):
-        return None
-
     out: set[str] = set()
-    for item in raw:
-        if isinstance(item, str):
-            name = item.strip()
-            if name:
-                out.add(name)
-        elif isinstance(item, dict):
-            name = item.get("name")
-            if isinstance(name, str) and name.strip():
-                out.add(name.strip())
-    return out
+    raw_allowed = data.get("allowed_tools")
+    if isinstance(raw_allowed, list):
+        for item in raw_allowed:
+            if isinstance(item, str):
+                name = item.strip()
+                if name:
+                    out.add(name)
+            elif isinstance(item, dict):
+                name = item.get("name")
+                if isinstance(name, str) and name.strip():
+                    out.add(name.strip())
+
+    mode = "advisory"
+    enforcement = data.get("enforcement")
+    if isinstance(enforcement, dict):
+        m = enforcement.get("mode")
+        if isinstance(m, str) and m.strip():
+            mode = m.strip().lower()
+
+    return {"mode": mode, "allowed_tools": out}

@@ -80,7 +80,8 @@ The `agents/` tree (e.g. `agents/media_agent/` with `agent.yaml`, `tools.yaml`, 
 - `AGENT.md` and `CONTEXT.md` may be written for readable planning context.
 - `ROUTE.json` may be written with route metadata; it is observational only and does not authorize execution.
 - Executed approved plans may write `EXECUTION_LOG.jsonl` and `RESULT.md`; execution reports `executed_success` or `executed_with_errors`.
-- Plan proposal policy can optionally apply agent `tools.yaml` as an additional constraint; registry-installed tools remain the source of truth.
+- Agents can opt into strict proposal constraints with `enforcement.mode: strict` in `tools.yaml`; this limits what that agent may propose.
+- Registry remains the source of truth for installed tools, and sandbox execution remains the only side-effect path after approval.
 - `workspace.py` manages readable files only.
 - `plans.py` validates `PLAN.json`.
 - `policy.py` writes and represents deterministic decisions.

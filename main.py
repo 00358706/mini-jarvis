@@ -69,7 +69,7 @@ from pydantic import BaseModel
 
 import audit
 import registry as reg
-from agent_loader import get_agent_allowed_tools, load_agent
+from agent_loader import get_agent_tool_policy, load_agent
 from approvals import (
     approve_plan,
     list_pending_plans,
@@ -358,8 +358,8 @@ async def plans_propose(plan: Plan):
     agent_tool_policy_note: str | None = None
     agent_id = (plan.agent or "").strip()
     if agent_id:
-        allowed_tools = get_agent_allowed_tools(agent_id)
-        if allowed_tools is None:
+        tool_policy = get_agent_tool_policy(agent_id)
+        if tool_policy is None:
             note = (
                 f"Agent '{agent_id}' tools.yaml allowlist missing/unparseable; "
                 "no additional agent-tool constraint enforced."
@@ -367,18 +367,30 @@ async def plans_propose(plan: Plan):
             reasons.append(note)
             agent_tool_policy_note = note
         else:
+            mode = str(tool_policy.get("mode") or "advisory").lower()
+            allowed_tools = tool_policy.get("allowed_tools")
+            if not isinstance(allowed_tools, set):
+                allowed_tools = set()
             blocked = [step.tool for step in plan.steps if step.tool not in allowed_tools]
-            if blocked:
+            if blocked and mode == "strict":
+                for t in blocked:
+                    reasons.append(
+                        f"Tool {t} is not allowed by agent {agent_id} tools.yaml strict policy."
+                    )
+                allowed = False
+                agent_tool_policy_note = (
+                    f"strict mode blocked: {', '.join(blocked)}"
+                )
+            elif blocked:
                 note = (
-                    f"Agent '{agent_id}' tools.yaml blocked tool(s): "
+                    f"Agent '{agent_id}' advisory tools policy would block: "
                     + ", ".join(blocked)
                 )
                 reasons.append(note)
-                allowed = False
                 agent_tool_policy_note = note
             else:
                 agent_tool_policy_note = (
-                    f"All plan tools are in agent '{agent_id}' allowed_tools."
+                    f"All plan tools are in agent '{agent_id}' allowed_tools (mode={mode})."
                 )
     else:
         reasons.append("No plan.agent supplied; no additional agent-tool constraint enforced.")
