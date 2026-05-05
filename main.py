@@ -69,7 +69,7 @@ from pydantic import BaseModel
 
 import audit
 import registry as reg
-from agent_loader import load_agent
+from agent_loader import get_agent_allowed_tools, load_agent
 from approvals import (
     approve_plan,
     list_pending_plans,
@@ -155,13 +155,13 @@ def _ensure_workspace_for_plan(plan: Plan) -> None:
         write_route(plan.plan_id, route_meta, state="active")
 
 
-def _write_workspace_policy_state(plan: Plan, decision) -> None:
+def _write_workspace_policy_state(plan: Plan, decision: dict) -> None:
     _ensure_workspace_for_plan(plan)
     write_plan(plan.plan_id, plan)
     write_policy_decision(plan.plan_id, decision)
 
 
-def _write_workspace_agent_context(plan: Plan) -> None:
+def _write_workspace_agent_context(plan: Plan, agent_tool_policy_note: str | None = None) -> None:
     source_endpoint = "/plans/propose"
     agent_id = (plan.agent or "").strip() or "unknown_agent"
     try:
@@ -195,6 +195,8 @@ def _write_workspace_agent_context(plan: Plan) -> None:
         f"- Risk level: `{plan.risk}`\n"
         f"- Requires approval: `{plan.requires_approval}`\n"
         f"- Source endpoint: `{source_endpoint}`\n\n"
+        + (f"- Agent tool policy: {agent_tool_policy_note}\n\n" if agent_tool_policy_note else "")
+        +
         "This workspace is readable state only. Policy, registry, approval state, "
         "and sandbox execution remain authoritative.\n"
     )
@@ -349,13 +351,45 @@ async def plans_propose(plan: Plan):
     Policy-check a structured plan; optionally persist as pending approval.
     Does not call sandbox, tools, or models.
     """
-    decision = evaluate_plan(plan, installed_tools=_installed_tool_names())
-    policy_out = {"allowed": decision.allowed, "reasons": decision.reasons}
+    base_decision = evaluate_plan(plan, installed_tools=_installed_tool_names())
+    reasons = list(base_decision.reasons)
+    allowed = bool(base_decision.allowed)
+
+    agent_tool_policy_note: str | None = None
+    agent_id = (plan.agent or "").strip()
+    if agent_id:
+        allowed_tools = get_agent_allowed_tools(agent_id)
+        if allowed_tools is None:
+            note = (
+                f"Agent '{agent_id}' tools.yaml allowlist missing/unparseable; "
+                "no additional agent-tool constraint enforced."
+            )
+            reasons.append(note)
+            agent_tool_policy_note = note
+        else:
+            blocked = [step.tool for step in plan.steps if step.tool not in allowed_tools]
+            if blocked:
+                note = (
+                    f"Agent '{agent_id}' tools.yaml blocked tool(s): "
+                    + ", ".join(blocked)
+                )
+                reasons.append(note)
+                allowed = False
+                agent_tool_policy_note = note
+            else:
+                agent_tool_policy_note = (
+                    f"All plan tools are in agent '{agent_id}' allowed_tools."
+                )
+    else:
+        reasons.append("No plan.agent supplied; no additional agent-tool constraint enforced.")
+        agent_tool_policy_note = "No plan.agent supplied."
+
+    policy_out = {"allowed": allowed, "reasons": reasons}
 
     try:
-        _write_workspace_policy_state(plan, decision)
-        _write_workspace_agent_context(plan)
-        if not decision.allowed:
+        _write_workspace_policy_state(plan, policy_out)
+        _write_workspace_agent_context(plan, agent_tool_policy_note=agent_tool_policy_note)
+        if not allowed:
             write_result(
                 plan.plan_id,
                 "# Result\n\nPolicy rejected the proposed plan.\n",
@@ -374,7 +408,7 @@ async def plans_propose(plan: Plan):
             },
         )
 
-    if not decision.allowed:
+    if not allowed:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={

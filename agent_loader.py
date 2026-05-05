@@ -233,3 +233,37 @@ def load_agent(agent_id: str) -> AgentConfig:
         policy_yaml_data=dict(pol_dict),
         planned_tool_names_fallback=_planned_tool_names_from_text(tools_text),
     )
+
+
+def get_agent_allowed_tools(agent_id: str) -> set[str] | None:
+    """
+    Return agent allowlisted tool names from tools.yaml, or None if unavailable.
+
+    Supports:
+      allowed_tools:
+        - name: radarr_search
+        - radarr_add
+    """
+    try:
+        cfg = load_agent(agent_id)
+    except FileNotFoundError:
+        return None
+
+    data = cfg.tools_yaml_data if isinstance(cfg.tools_yaml_data, dict) else {}
+    raw = data.get("allowed_tools")
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        return None
+
+    out: set[str] = set()
+    for item in raw:
+        if isinstance(item, str):
+            name = item.strip()
+            if name:
+                out.add(name)
+        elif isinstance(item, dict):
+            name = item.get("name")
+            if isinstance(name, str) and name.strip():
+                out.add(name.strip())
+    return out
