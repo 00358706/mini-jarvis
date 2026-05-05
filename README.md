@@ -74,7 +74,15 @@ The `agents/` tree (e.g. `agents/media_agent/` with `agent.yaml`, `tools.yaml`, 
 
 ## Filesystem workspaces
 
-Task-oriented state lives under **`data/workspaces/`** in **`active/`**, **`completed/`**, and **`rejected/`**. Each active task folder holds readable artifacts (for example `REQUEST.md`, `ROUTE.json`, `PLAN.json`, `POLICY_DECISION.json`, `APPROVAL.md`, `EXECUTION_LOG.jsonl`, `RESULT.md`). **`workspace.py`** only creates and updates those files; it does not run tools or call models. **`plans.py`** validates **`PLAN.json`**; **`policy.py`** makes deterministic decisions (written to **`POLICY_DECISION.json`**); **`approvals.py`** remains the separate on-disk plan approval queue under **`data/plans/`**. The **sandbox worker** is still the only path for tool side effects. Model output is **proposal**, not authority.
+- `data/workspaces/active/`
+- `data/workspaces/completed/`
+- `data/workspaces/rejected/`
+- `workspace.py` manages readable files only.
+- `plans.py` validates `PLAN.json`.
+- `policy.py` writes and represents deterministic decisions.
+- `approvals.py` tracks approval state.
+- The sandbox worker remains the only side-effect execution path.
+- Model output is proposal, not authority.
 
 ---
 
