@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path, PurePath
 from typing import Any
 
 import httpx
@@ -293,6 +294,111 @@ async def sabnzbd_resume(args: dict) -> ToolResult:
     return ToolResult(tool_name="sabnzbd_resume", success=True, data={"resumed": True})
 
 
+_INSPECT_MAX_BYTES = 100 * 1024
+_SECRET_BASENAMES = {
+    ".env",
+    ".env.local",
+    ".env.development",
+    ".env.production",
+    ".env.test",
+    "secrets.json",
+    "credentials.json",
+    "id_rsa",
+    "id_dsa",
+    ".pypirc",
+}
+_SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent
+
+
+def _is_secret_name(path_obj: Path) -> bool:
+    name = path_obj.name.lower()
+    if name in _SECRET_BASENAMES:
+        return True
+    if name.endswith(_SECRET_SUFFIXES):
+        return True
+    return False
+
+
+async def inspect_file(args: dict) -> ToolResult:
+    raw_path = args.get("path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return ToolResult(
+            tool_name="inspect_file",
+            success=False,
+            error="Field 'path' must be a non-empty string.",
+        )
+
+    requested = raw_path.strip()
+    pure = PurePath(requested)
+    if ".." in pure.parts:
+        return ToolResult(
+            tool_name="inspect_file",
+            success=False,
+            error="Path traversal ('..') is not allowed.",
+        )
+
+    repo_root = _repo_root()
+    requested_path = Path(requested)
+    if requested_path.is_absolute():
+        candidate = requested_path.resolve()
+    else:
+        candidate = (repo_root / requested_path).resolve()
+
+    try:
+        candidate.relative_to(repo_root)
+    except ValueError:
+        return ToolResult(
+            tool_name="inspect_file",
+            success=False,
+            error="Path must stay inside the repository root.",
+        )
+
+    if _is_secret_name(candidate):
+        return ToolResult(
+            tool_name="inspect_file",
+            success=False,
+            error="Access to secret-like files is blocked.",
+        )
+
+    if not candidate.is_file():
+        return ToolResult(
+            tool_name="inspect_file",
+            success=False,
+            error=f"File not found: {requested}",
+        )
+
+    size_bytes = candidate.stat().st_size
+    if size_bytes > _INSPECT_MAX_BYTES:
+        return ToolResult(
+            tool_name="inspect_file",
+            success=False,
+            error=f"File exceeds 102400 byte limit: {size_bytes}",
+        )
+
+    try:
+        content = candidate.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return ToolResult(
+            tool_name="inspect_file",
+            success=False,
+            error=f"Failed to read file: {exc}",
+        )
+
+    return ToolResult(
+        tool_name="inspect_file",
+        success=True,
+        data={
+            "path": str(candidate.relative_to(repo_root)).replace("\\", "/"),
+            "size_bytes": size_bytes,
+            "content": content,
+        },
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Registry — name → implementation (subprocess worker resolves by name)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -305,6 +411,7 @@ _TOOL_FUNCS: dict[str, Any] = {
     "sabnzbd_queue": sabnzbd_queue,
     "sabnzbd_pause": sabnzbd_pause,
     "sabnzbd_resume": sabnzbd_resume,
+    "inspect_file": inspect_file,
 }
 
 

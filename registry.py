@@ -236,3 +236,12 @@ _seed_builtin(
     input_schema={},
     permissions=["sabnzbd:write"],
 )
+
+# Project maintainer
+_seed_builtin(
+    name="inspect_file",
+    endpoint="internal://tools/inspect_file",
+    description="Read a small text file inside the repository for review.",
+    input_schema={"path": {"type": "string", "required": True}},
+    permissions=["file:read"],
+)
