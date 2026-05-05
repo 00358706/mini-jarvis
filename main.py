@@ -94,6 +94,7 @@ from workspace import (
     append_execution_log,
     create_workspace,
     move_workspace,
+    write_patch_proposal,
     workspace_path,
     write_approval,
     write_agent,
@@ -707,6 +708,29 @@ async def plans_execute(plan_id: str):
             )
             for s in step_results
         ) or "- (no steps)"
+        for s in step_results:
+            step_result = s.get("result")
+            if not isinstance(step_result, dict):
+                continue
+            step_data = step_result.get("data")
+            if not isinstance(step_data, dict):
+                continue
+            if step_data.get("proposal_only") is not True:
+                continue
+            patch_text = step_data.get("patch")
+            if not isinstance(patch_text, str) or not patch_text:
+                continue
+            target_path = str(step_data.get("path") or "")
+            summary = str(step_data.get("summary") or "")
+            applied = bool(step_data.get("applied"))
+            write_patch_proposal(
+                plan_id,
+                target_path=target_path,
+                summary=summary,
+                patch=patch_text,
+                applied=applied,
+            )
+            break
         write_result(
             plan_id,
             (

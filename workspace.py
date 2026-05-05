@@ -31,6 +31,7 @@ _POLICY_DECISION = "POLICY_DECISION.json"
 _APPROVAL = "APPROVAL.md"
 _EXECUTION_LOG = "EXECUTION_LOG.jsonl"
 _RESULT = "RESULT.md"
+_PATCH_PROPOSAL = "PATCH_PROPOSAL.md"
 
 _MoveDest = Literal["completed", "rejected"]
 _STATE = Literal["active", "completed", "rejected"]
@@ -145,6 +146,32 @@ def write_result(task_id: str, markdown: str) -> Path:
     root = _active_root(task_id)
     path = root / _RESULT
     path.write_text(markdown, encoding="utf-8")
+    return path
+
+
+def write_patch_proposal(
+    task_id: str,
+    *,
+    target_path: str,
+    summary: str,
+    patch: str,
+    applied: bool,
+) -> Path:
+    """Write PATCH_PROPOSAL.md in an active workspace."""
+    root = _active_root(task_id)
+    path = root / _PATCH_PROPOSAL
+    content = (
+        "# Patch Proposal\n\n"
+        f"Target: {target_path}\n"
+        "Summary:\n"
+        f"{summary}\n\n"
+        f"Applied: {str(applied).lower()}\n"
+        "Patch:\n"
+        "```diff\n"
+        f"{patch}\n"
+        "```\n"
+    )
+    path.write_text(content, encoding="utf-8")
     return path
 
 
