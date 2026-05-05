@@ -266,6 +266,11 @@ Proposal, approval, and execution are intentionally separate steps.
 
 ---
 
+## Project checkpoint docs
+
+- `docs/CURRENT_STATE.md`
+- `docs/ARCHITECTURE_INVARIANTS.md`
+
 ## Extending tools and routing
 
 - **New built-in tool**: implement in `tools.py`, register in `_TOOL_FUNCS`, seed or lifecycle through `registry`, extend `_INTENT_MAP` as needed, keep httpx calls behind `http_allowlist` checks.
