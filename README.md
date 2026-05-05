@@ -126,7 +126,7 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `agent_loader.py` | Reads agent folder metadata from `agents/<id>/`; no code execution from agent dirs |
 | `workspace.py` | Manages task workspace files under `data/workspaces/`; filesystem only |
 
-Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack (human → gateway → … → sandbox → tools → audit).
+Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack: human → gateway → agent context → planner → policy → registry → approval/session → sandbox → tools → audit.
 
 ---
 
@@ -162,7 +162,7 @@ Bind address: set `GATEWAY_HOST` (for example a Tailscale IP) so the gateway doe
 | `SABNZBD_URL` / `SABNZBD_API_KEY` | SABnzbd |
 | `OLLAMA_TIMEOUT` / `CLOUD_TIMEOUT` / `TOOL_TIMEOUT` | HTTP timeouts in seconds |
 
-Comment-only placeholders in `.env.example` (optional / future): `CLOUD_ALLOW_SENSITIVE`, `ENABLE_SANDBOX_PYTHON_EXEC`.
+Comment-only placeholders in `.env.example` are optional/future: `CLOUD_ALLOW_SENSITIVE`, `ENABLE_SANDBOX_PYTHON_EXEC`.
 
 ---
 
