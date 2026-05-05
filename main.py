@@ -630,8 +630,12 @@ async def plans_execute(plan_id: str):
             ),
         )
 
+    ok_steps = sum(1 for s in step_results if s["status"] == "ok")
+    err_steps = len(step_results) - ok_steps
+    exec_status = "executed_success" if err_steps == 0 else "executed_with_errors"
+
     response_body = {
-        "status": "executed",
+        "status": exec_status,
         "plan_id": plan_id,
         "steps": step_results,
     }
@@ -643,13 +647,18 @@ async def plans_execute(plan_id: str):
             {
                 "event": "execution_completed",
                 "plan_id": plan_id,
-                "status": "executed",
+                "status": exec_status,
             },
         )
-        ok_steps = sum(1 for s in step_results if s["status"] == "ok")
-        err_steps = len(step_results) - ok_steps
         step_lines = "\n".join(
-            f"- `{s['step_id']}` / `{s['tool']}`: {s['status']}"
+            (
+                f"- `{s['step_id']}` / `{s['tool']}`: {s['status']}"
+                + (
+                    f" — {(s['result'].get('error') or 'error')}"
+                    if s["status"] == "error"
+                    else ""
+                )
+            )
             for s in step_results
         ) or "- (no steps)"
         write_result(
@@ -657,7 +666,7 @@ async def plans_execute(plan_id: str):
             (
                 "# Result\n\n"
                 f"- plan id: `{plan_id}`\n"
-                f"- status: `executed`\n\n"
+                f"- status: `{exec_status}`\n\n"
                 "## Step summary\n\n"
                 f"{step_lines}\n\n"
                 "## Totals\n\n"
@@ -684,7 +693,7 @@ async def plans_execute(plan_id: str):
     await audit.append(
         kind="plan",
         input_summary=f"Plan execution completed: {plan_id}",
-        result_summary="status=executed",
+        result_summary=f"status={exec_status}",
     )
 
     return response_body

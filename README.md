@@ -79,7 +79,7 @@ The `agents/` tree (e.g. `agents/media_agent/` with `agent.yaml`, `tools.yaml`, 
 - `data/workspaces/completed/` after plan execution finishes.
 - `AGENT.md` and `CONTEXT.md` may be written for readable planning context.
 - `ROUTE.json` may be written with route metadata; it is observational only and does not authorize execution.
-- Executed approved plans may write `EXECUTION_LOG.jsonl` and `RESULT.md`; workspaces remain readable state only.
+- Executed approved plans may write `EXECUTION_LOG.jsonl` and `RESULT.md`; execution reports `executed_success` or `executed_with_errors`.
 - `workspace.py` manages readable files only.
 - `plans.py` validates `PLAN.json`.
 - `policy.py` writes and represents deterministic decisions.

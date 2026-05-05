@@ -64,6 +64,12 @@ Write-Host "--- POST /plans/$PlanId/execute ---"
 $Execute = Invoke-RestMethod -Uri "$BaseUrl/plans/$PlanId/execute" -Method Post -Headers $Headers
 $Execute | ConvertTo-Json -Depth 12
 
+if ($Execute.status -in @("executed_success", "executed_with_errors")) {
+    Write-Host ("execute status: " + $Execute.status)
+} else {
+    Write-Host ("WARNING: unexpected execute status: " + $Execute.status)
+}
+
 $CompletedLog = Join-Path $CompletedPath "EXECUTION_LOG.jsonl"
 $CompletedResult = Join-Path $CompletedPath "RESULT.md"
 
