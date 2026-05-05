@@ -78,6 +78,7 @@ The `agents/` tree (e.g. `agents/media_agent/` with `agent.yaml`, `tools.yaml`, 
 - `data/workspaces/rejected/` when plans are rejected.
 - `data/workspaces/completed/` after plan execution finishes.
 - `AGENT.md` and `CONTEXT.md` may be written for readable planning context.
+- `ROUTE.json` may be written with route metadata; it is observational only and does not authorize execution.
 - `workspace.py` manages readable files only.
 - `plans.py` validates `PLAN.json`.
 - `policy.py` writes and represents deterministic decisions.

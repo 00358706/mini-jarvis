@@ -190,6 +190,20 @@ def write_context(
     return path
 
 
+def write_route(
+    task_id: str,
+    route: dict[str, Any],
+    state: _STATE = "active",
+) -> Path:
+    """Overwrite ROUTE.json for a workspace in the given state."""
+    root = workspace_path(task_id, state)
+    if not root.is_dir():
+        raise FileNotFoundError(f"No {state} workspace for task_id={task_id!r}: {root}")
+    path = root / _ROUTE
+    path.write_text(json.dumps(route, indent=2, default=str), encoding="utf-8")
+    return path
+
+
 def move_workspace(task_id: str, destination: _MoveDest) -> Path:
     """
     Move ``active/<task_id>`` to ``completed`` or ``rejected``.

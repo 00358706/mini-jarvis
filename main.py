@@ -98,6 +98,7 @@ from workspace import (
     write_approval,
     write_agent,
     write_context,
+    write_route,
     write_plan,
     write_policy_decision,
     write_request,
@@ -128,15 +129,30 @@ def _workspace_exists_active(task_id: str) -> bool:
     return workspace_path(task_id, state="active").is_dir()
 
 
+def _route_metadata_for_plan(plan: Plan) -> dict:
+    return {
+        "plan_id": plan.plan_id,
+        "agent": plan.agent,
+        "risk": plan.risk,
+        "requires_approval": plan.requires_approval,
+        "status": plan.status,
+        "source": "plans_api",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "endpoint": "/plans/propose",
+    }
+
+
 def _ensure_workspace_for_plan(plan: Plan) -> None:
+    route_meta = _route_metadata_for_plan(plan)
     if not _workspace_exists_active(plan.plan_id):
         create_workspace(
             task_id=plan.plan_id,
             request_text="# Request\n\nPlan proposed via /plans/propose.\n",
-            metadata={"source": "/plans/propose", "plan_id": plan.plan_id},
+            metadata=route_meta,
         )
     else:
         write_request(plan.plan_id, "# Request\n\nPlan proposed via /plans/propose.\n")
+        write_route(plan.plan_id, route_meta, state="active")
 
 
 def _write_workspace_policy_state(plan: Plan, decision) -> None:
@@ -146,7 +162,7 @@ def _write_workspace_policy_state(plan: Plan, decision) -> None:
 
 
 def _write_workspace_agent_context(plan: Plan) -> None:
-    source_note = "/plans/propose"
+    source_endpoint = "/plans/propose"
     agent_id = (plan.agent or "").strip() or "unknown_agent"
     try:
         cfg = load_agent(agent_id)
@@ -174,11 +190,13 @@ def _write_workspace_agent_context(plan: Plan) -> None:
     context_md = (
         "# Context\n\n"
         "This is the readable context used for planning/review.\n\n"
-        f"- source: `{source_note}`\n"
-        f"- agent id: `{agent_id}`\n"
-        f"- plan id: `{plan.plan_id}`\n\n"
-        "Agent context is informational only and is not authority. "
-        "Policy, registry, and sandbox enforcement remain authoritative.\n"
+        f"- Plan id: `{plan.plan_id}`\n"
+        f"- Agent id: `{agent_id}`\n"
+        f"- Risk level: `{plan.risk}`\n"
+        f"- Requires approval: `{plan.requires_approval}`\n"
+        f"- Source endpoint: `{source_endpoint}`\n\n"
+        "This workspace is readable state only. Policy, registry, approval state, "
+        "and sandbox execution remain authoritative.\n"
     )
     write_agent(plan.plan_id, agent_md, state="active")
     write_context(plan.plan_id, context_md, state="active")
