@@ -245,3 +245,14 @@ _seed_builtin(
     input_schema={"path": {"type": "string", "required": True}},
     permissions=["file:read"],
 )
+_seed_builtin(
+    name="propose_patch",
+    endpoint="internal://tools/propose_patch",
+    description="Return a patch proposal artifact without applying file changes.",
+    input_schema={
+        "path": {"type": "string", "required": True},
+        "summary": {"type": "string", "required": True},
+        "patch": {"type": "string", "required": True},
+    },
+    permissions=["file:proposal"],
+)

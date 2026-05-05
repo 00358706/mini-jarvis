@@ -295,6 +295,7 @@ async def sabnzbd_resume(args: dict) -> ToolResult:
 
 
 _INSPECT_MAX_BYTES = 100 * 1024
+_PATCH_MAX_BYTES = 100 * 1024
 _SECRET_BASENAMES = {
     ".env",
     ".env.local",
@@ -399,6 +400,85 @@ async def inspect_file(args: dict) -> ToolResult:
     )
 
 
+async def propose_patch(args: dict) -> ToolResult:
+    raw_path = args.get("path")
+    raw_summary = args.get("summary")
+    raw_patch = args.get("patch")
+
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return ToolResult(
+            tool_name="propose_patch",
+            success=False,
+            error="Field 'path' must be a non-empty string.",
+        )
+    if not isinstance(raw_summary, str) or not raw_summary.strip():
+        return ToolResult(
+            tool_name="propose_patch",
+            success=False,
+            error="Field 'summary' must be a non-empty string.",
+        )
+    if not isinstance(raw_patch, str) or not raw_patch.strip():
+        return ToolResult(
+            tool_name="propose_patch",
+            success=False,
+            error="Field 'patch' must be a non-empty string.",
+        )
+
+    requested = raw_path.strip()
+    summary = raw_summary.strip()
+    patch_text = raw_patch
+
+    if len(patch_text.encode("utf-8", errors="replace")) > _PATCH_MAX_BYTES:
+        return ToolResult(
+            tool_name="propose_patch",
+            success=False,
+            error=f"Patch exceeds 102400 byte limit.",
+        )
+
+    pure = PurePath(requested)
+    if ".." in pure.parts:
+        return ToolResult(
+            tool_name="propose_patch",
+            success=False,
+            error="Path traversal ('..') is not allowed.",
+        )
+
+    repo_root = _repo_root()
+    requested_path = Path(requested)
+    if requested_path.is_absolute():
+        candidate = requested_path.resolve()
+    else:
+        candidate = (repo_root / requested_path).resolve()
+
+    try:
+        rel_path = candidate.relative_to(repo_root)
+    except ValueError:
+        return ToolResult(
+            tool_name="propose_patch",
+            success=False,
+            error="Path must stay inside the repository root.",
+        )
+
+    if _is_secret_name(candidate):
+        return ToolResult(
+            tool_name="propose_patch",
+            success=False,
+            error="Access to secret-like files is blocked.",
+        )
+
+    return ToolResult(
+        tool_name="propose_patch",
+        success=True,
+        data={
+            "path": str(rel_path).replace("\\", "/"),
+            "summary": summary,
+            "patch": patch_text,
+            "applied": False,
+            "proposal_only": True,
+        },
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Registry — name → implementation (subprocess worker resolves by name)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -412,6 +492,7 @@ _TOOL_FUNCS: dict[str, Any] = {
     "sabnzbd_pause": sabnzbd_pause,
     "sabnzbd_resume": sabnzbd_resume,
     "inspect_file": inspect_file,
+    "propose_patch": propose_patch,
 }
 
 

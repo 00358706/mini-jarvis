@@ -213,6 +213,8 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - Missing maintainer tools are expected to fail safely until those tools are installed in the registry.
 - `inspect_file` is a read-only maintainer tool (`file:read`) for small repository files.
 - `inspect_file` is repository-confined and executes through the sandbox worker path.
+- `propose_patch` is a proposal-only maintainer tool (`file:proposal`).
+- `propose_patch` does not apply changes; human review/approval is still required.
 
 ---
 

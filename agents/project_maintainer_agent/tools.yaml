@@ -29,8 +29,8 @@ allowed_tools:
     version: null
     rationale: Condense file contents for review without executing code (future).
   - name: propose_patch
-    version: null
-    rationale: Emit a unified-diff or edit description for human or CI application (future).
+    version: v1
+    rationale: Return a proposal-only patch artifact for review; never apply changes directly.
   - name: check_invariants
     version: null
     rationale: Run agreed checks (docs vs code, layer boundaries) without mutating runtime (future).
