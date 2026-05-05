@@ -120,11 +120,11 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `http_allowlist.py` | Per-request URL policy for tool HTTP calls |
 | `audit.py` | Structured audit log |
 | `config.py` | Environment-backed settings |
-| `plans.py` | Defines structured plan models (no execution) |
-| `policy.py` | Evaluates proposed plans against policy (no execution) |
-| `approvals.py` | Stores pending / approved / rejected / executed plan JSON under `data/plans/` |
-| `agent_loader.py` | Reads agent folder metadata from `agents/<id>/` (no code execution from agent dirs) |
-| `workspace.py` | Task workspace files under `data/workspaces/` (filesystem only; no execution) |
+| `plans.py` | Defines structured plan models; no execution |
+| `policy.py` | Evaluates proposed plans against policy; no execution |
+| `approvals.py` | Stores pending, approved, rejected, and executed plan JSON under `data/plans/` |
+| `agent_loader.py` | Reads agent folder metadata from `agents/<id>/`; no code execution from agent dirs |
+| `workspace.py` | Manages task workspace files under `data/workspaces/`; filesystem only |
 
 Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack (human → gateway → … → sandbox → tools → audit).
 
@@ -148,8 +148,8 @@ Bind address: set `GATEWAY_HOST` (for example a Tailscale IP) so the gateway doe
 
 | Variable | Purpose |
 |----------|---------|
-| `GATEWAY_HOST` | Bind address (default `0.0.0.0`) |
-| `GATEWAY_PORT` | Listen port (default `8000`) |
+| `GATEWAY_HOST` | Bind address; default `0.0.0.0` |
+| `GATEWAY_PORT` | Listen port; default `8000` |
 | `GATEWAY_API_KEY` | Required `X-API-Key` value for authenticated routes |
 | `OLLAMA_URL` | Ollama base URL |
 | `CLASSIFIER_MODEL` | Model for intent classification |
@@ -160,7 +160,7 @@ Bind address: set `GATEWAY_HOST` (for example a Tailscale IP) so the gateway doe
 | `RADARR_URL` / `RADARR_API_KEY` | Radarr |
 | `SONARR_URL` / `SONARR_API_KEY` | Sonarr |
 | `SABNZBD_URL` / `SABNZBD_API_KEY` | SABnzbd |
-| `OLLAMA_TIMEOUT` / `CLOUD_TIMEOUT` / `TOOL_TIMEOUT` | HTTP timeouts (seconds) |
+| `OLLAMA_TIMEOUT` / `CLOUD_TIMEOUT` / `TOOL_TIMEOUT` | HTTP timeouts in seconds |
 
 Comment-only placeholders in `.env.example` (optional / future): `CLOUD_ALLOW_SENSITIVE`, `ENABLE_SANDBOX_PYTHON_EXEC`.
 
