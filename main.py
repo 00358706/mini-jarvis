@@ -88,7 +88,7 @@ from models import (
     ToolApprovalRequest,
     ToolProposal,
 )
-from plans import Plan, PlanLimits, PlanStep, create_plan_id
+from plans import Plan, PlanLimits, PlanStep, create_plan_id, validate_plan_id
 from policy import evaluate_plan
 from tools import run_installed_tool
 from workspace import (
@@ -591,7 +591,11 @@ async def plans_from_message(req: PlanFromMessageRequest):
     if not agent:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="agent is required.")
 
-    plan_id = (req.plan_id or "").strip() or create_plan_id()
+    raw_plan_id = (req.plan_id or "").strip() or create_plan_id()
+    try:
+        plan_id = validate_plan_id(raw_plan_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
     message = (req.message or "").strip()
     if not message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="message is required.")
@@ -659,6 +663,8 @@ async def plans_pending_get(plan_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pending plan {plan_id!r} not found.",
         ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
     return p.model_dump(mode="json")
 
 
@@ -672,6 +678,8 @@ async def plans_approve(plan_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pending plan {plan_id!r} not found.",
         ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
     try:
         write_approval(
             plan_id,
@@ -706,6 +714,8 @@ async def plans_reject(plan_id: str, req: PlanRejectRequest):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Pending plan {plan_id!r} not found.",
         ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
     try:
         write_approval(
             plan_id,
@@ -751,6 +761,8 @@ async def plans_execute(plan_id: str):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Plan is not in approved state or was not found under approved plans.",
         ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
     if plan.status != "approved":
         raise HTTPException(

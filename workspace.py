@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from plans import Plan, plan_to_dict
+from plans import Plan, plan_to_dict, validate_storage_id
 from policy import PolicyDecision
 
 _WORKSPACES_ROOT = Path(__file__).resolve().parent / "data" / "workspaces"
@@ -69,6 +69,10 @@ def _validate_filename(filename: str) -> str:
     if filename not in _WORKSPACE_FILE_SET:
         raise ValueError(f"Unknown workspace filename: {filename!r}")
     return filename
+
+
+def _validate_task_id(task_id: str) -> str:
+    return validate_storage_id(task_id, field_name="task_id")
 
 
 def list_workspaces(
@@ -224,7 +228,7 @@ def _gen_task_id() -> str:
 
 def workspace_path(task_id: str, state: _STATE = "active") -> Path:
     """Return the path to ``<task_id>`` under the given workspace state."""
-    return _state_dir(state) / task_id
+    return _state_dir(state) / _validate_task_id(task_id)
 
 
 def _active_root(task_id: str) -> Path:

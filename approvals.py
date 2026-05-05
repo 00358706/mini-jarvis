@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from plans import Plan, plan_from_dict, plan_to_dict
+from plans import Plan, plan_from_dict, plan_to_dict, validate_plan_id
 
 logger = logging.getLogger("gateway.approvals")
 
@@ -37,7 +37,14 @@ def _ensure_trees() -> None:
 
 
 def _path_for(plan_id: str, status: PlanFolder) -> Path:
-    return _subdir(status) / f"{plan_id}.json"
+    safe_id = validate_plan_id(plan_id)
+    base = _subdir(status).resolve()
+    path = (base / f"{safe_id}.json").resolve()
+    try:
+        path.relative_to(base)
+    except ValueError:
+        raise ValueError("plan_id resolved outside plan storage.") from None
+    return path
 
 
 # ──────────────────────────────────────────────────────────────────────────────

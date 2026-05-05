@@ -313,6 +313,23 @@ _SECRET_BASENAMES = {
 }
 _SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
 _SECRET_NAME_SUBSTRINGS = ("token", "password", "secret", "credential", "apikey", "api_key")
+_DEFAULT_INCLUDE_GLOBS = [
+    "*.py",
+    "*.md",
+    "*.ps1",
+    "*.sh",
+    "*.yaml",
+    "*.yml",
+    "*.json",
+]
+_MANDATORY_EXCLUDE_DIRS = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "data/workspaces",
+    "data/plans",
+]
 
 
 def _repo_root() -> Path:
@@ -405,6 +422,29 @@ def _is_probably_binary(path_obj: Path) -> bool:
         return b"\x00" in chunk
     except OSError:
         return True
+
+
+def _repo_relative_file(path_obj: Path, repo_root: Path) -> str | None:
+    """
+    Return a repo-relative path for non-symlinked files that resolve inside repo_root.
+    """
+    try:
+        if path_obj.is_symlink() or path_obj.is_dir():
+            return None
+        path_obj.resolve().relative_to(repo_root)
+        return str(path_obj.relative_to(repo_root)).replace("\\", "/")
+    except Exception:
+        return None
+
+
+def _exclude_prefixes(extra_exclude_dirs: object = None) -> list[str]:
+    exclude_dirs = [*_MANDATORY_EXCLUDE_DIRS, *_normalize_str_list(extra_exclude_dirs)]
+    prefixes: list[str] = []
+    for d in exclude_dirs:
+        d_norm = d.strip().strip("/").strip("\\")
+        if d_norm:
+            prefixes.append(d_norm.replace("\\", "/") + "/")
+    return prefixes
 
 
 async def inspect_file(args: dict) -> ToolResult:
@@ -574,22 +614,7 @@ async def list_project_files(args: dict) -> ToolResult:
         max_results = 1000
 
     include_hidden = bool(args.get("include_hidden", False))
-    include_globs = _normalize_globs(args.get("include_globs")) or [
-        "*.py",
-        "*.md",
-        "*.ps1",
-        "*.yaml",
-        "*.yml",
-        "*.json",
-    ]
-    exclude_dirs = _normalize_str_list(args.get("exclude_dirs")) or [
-        ".git",
-        ".venv",
-        "venv",
-        "__pycache__",
-        "data/workspaces",
-        "data/plans",
-    ]
+    include_globs = _normalize_globs(args.get("include_globs")) or list(_DEFAULT_INCLUDE_GLOBS)
 
     root_path, err = _resolve_repo_path(raw_path=raw_root, repo_root=repo_root)
     if err:
@@ -602,27 +627,20 @@ async def list_project_files(args: dict) -> ToolResult:
             error=f"Root is not a directory: {raw_root}",
         )
 
-    exclude_prefixes = []
-    for d in exclude_dirs:
-        d_norm = d.strip().strip("/").strip("\\")
-        if d_norm:
-            exclude_prefixes.append(d_norm.replace("\\", "/") + "/")
+    exclude_prefixes = _exclude_prefixes(args.get("exclude_dirs"))
 
     results: list[dict[str, Any]] = []
     for p in root_path.rglob("*"):
         if len(results) >= max_results:
             break
-        try:
-            if p.is_dir():
-                continue
-            rel = p.relative_to(repo_root)
-        except Exception:
+        rel_str = _repo_relative_file(p, repo_root)
+        if rel_str is None:
             continue
 
-        rel_str = str(rel).replace("\\", "/")
+        rel_parts = Path(rel_str).parts
 
         if not include_hidden:
-            if any(part.startswith(".") for part in rel.parts):
+            if any(part.startswith(".") for part in rel_parts):
                 continue
 
         # directory exclusions (prefix match)
@@ -699,22 +717,7 @@ async def search_repo(args: dict) -> ToolResult:
     if max_size > 500_000:
         max_size = 500_000
 
-    include_globs = _normalize_globs(args.get("include_globs")) or [
-        "*.py",
-        "*.md",
-        "*.ps1",
-        "*.yaml",
-        "*.yml",
-        "*.json",
-    ]
-    exclude_dirs = _normalize_str_list(args.get("exclude_dirs")) or [
-        ".git",
-        ".venv",
-        "venv",
-        "__pycache__",
-        "data/workspaces",
-        "data/plans",
-    ]
+    include_globs = _normalize_globs(args.get("include_globs")) or list(_DEFAULT_INCLUDE_GLOBS)
 
     root_path, err = _resolve_repo_path(raw_path=raw_root, repo_root=repo_root)
     if err:
@@ -723,25 +726,16 @@ async def search_repo(args: dict) -> ToolResult:
     if not root_path.is_dir():
         return ToolResult(tool_name="search_repo", success=False, error=f"Root is not a directory: {raw_root}")
 
-    exclude_prefixes = []
-    for d in exclude_dirs:
-        d_norm = d.strip().strip("/").strip("\\")
-        if d_norm:
-            exclude_prefixes.append(d_norm.replace("\\", "/") + "/")
+    exclude_prefixes = _exclude_prefixes(args.get("exclude_dirs"))
 
     matches: list[dict[str, Any]] = []
     files_scanned = 0
     for p in root_path.rglob("*"):
         if len(matches) >= max_results:
             break
-        try:
-            if p.is_dir():
-                continue
-            rel = p.relative_to(repo_root)
-        except Exception:
+        rel_str = _repo_relative_file(p, repo_root)
+        if rel_str is None:
             continue
-
-        rel_str = str(rel).replace("\\", "/")
 
         if any(rel_str.startswith(pref) for pref in exclude_prefixes):
             continue
@@ -832,6 +826,10 @@ def validate_args_against_schema(
     Schema shape per field:
       {"field_name": {"type": "string", "required": true}}
     """
+    unexpected = sorted(str(k) for k in set(args) - set(schema))
+    if unexpected:
+        return False, f"Unexpected field(s): {', '.join(unexpected)}."
+
     for field_name, spec in schema.items():
         if not isinstance(spec, dict):
             continue
@@ -850,10 +848,14 @@ def validate_args_against_schema(
         want = spec.get("type")
         if want == "string" and not isinstance(val, str):
             return False, f"Field '{field_name}' must be a string."
-        if want == "integer" and not isinstance(val, int):
+        if want == "integer" and type(val) is not int:
             return False, f"Field '{field_name}' must be an integer."
-        if want == "number" and not isinstance(val, (int, float)):
+        if want == "number" and (isinstance(val, bool) or not isinstance(val, (int, float))):
             return False, f"Field '{field_name}' must be a number."
+        if want == "boolean" and type(val) is not bool:
+            return False, f"Field '{field_name}' must be a boolean."
+        if want == "array" and not isinstance(val, list):
+            return False, f"Field '{field_name}' must be an array."
 
     return True, None
 

@@ -48,7 +48,8 @@ Assert-True ($Resp1.workspace.state -eq "active") "Expected workspace.state=acti
 
 $Ws1 = Invoke-RestMethod -Uri ($BaseUrl + $Resp1.workspace.summary_url) -Method Get -Headers $Headers
 Assert-True ($Ws1.plan_json.steps[0].tool -eq "list_project_files") "Expected tool=list_project_files in case 1 plan_json."
-Write-Host "Case 1 OK: tool=list_project_files"
+Assert-True ($Ws1.execution_log_count -eq 0) "/plans/from-message must not execute tools in case 1."
+Write-Host "Case 1 OK: tool=list_project_files and execution_log_count=0"
 
 # Case 2: search repo for PATCH_PROPOSAL.md
 $PlanId2 = "manual_from_message_search_" + (Get-Date -Format "yyyyMMdd_HHmmss")
@@ -67,7 +68,8 @@ $Ws2 = Invoke-RestMethod -Uri ($BaseUrl + $Resp2.workspace.summary_url) -Method 
 Assert-True ($Ws2.plan_json.steps[0].tool -eq "search_repo") "Expected tool=search_repo in case 2 plan_json."
 $Q2 = $Ws2.plan_json.steps[0].args.query
 Assert-True (($Q2 -like "*PATCH_PROPOSAL.md*") -or ($Q2 -eq "PATCH_PROPOSAL.md")) "Expected args.query to include PATCH_PROPOSAL.md."
-Write-Host "Case 2 OK: tool=search_repo and query includes PATCH_PROPOSAL.md"
+Assert-True ($Ws2.execution_log_count -eq 0) "/plans/from-message must not execute tools in case 2."
+Write-Host "Case 2 OK: tool=search_repo, query includes PATCH_PROPOSAL.md, execution_log_count=0"
 
 # Case 3: unsafe phrasing "run radarr_search" should not produce radarr_search
 $PlanId3 = "manual_from_message_unsafe_" + (Get-Date -Format "yyyyMMdd_HHmmss")
@@ -85,7 +87,8 @@ try {
         $Ws3 = Invoke-RestMethod -Uri ($BaseUrl + $Resp3.workspace.summary_url) -Method Get -Headers $Headers
         $Tool3 = $Ws3.plan_json.steps[0].tool
         Assert-True ($Tool3 -ne "radarr_search") "Unsafe message produced radarr_search (must not)."
-        Write-Host ("Case 3 OK: did not propose radarr_search (tool=" + $Tool3 + ")")
+        Assert-True ($Ws3.execution_log_count -eq 0) "/plans/from-message must not execute tools in case 3."
+        Write-Host ("Case 3 OK: did not propose radarr_search (tool=" + $Tool3 + "), execution_log_count=0")
     } else {
         Write-Host ("Case 3 OK: not pending_approval (status=" + $Resp3.status + ")")
     }

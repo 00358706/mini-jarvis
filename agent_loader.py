@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from plans import validate_storage_id
+
 logger = logging.getLogger("gateway.agent_loader")
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -165,6 +167,7 @@ def load_agent(agent_id: str) -> AgentConfig:
     are parsed into ``*_yaml_data``. Otherwise structured fields rely on regex
     fallbacks plus ``planned_tool_names_fallback`` from ``tools.yaml`` text.
     """
+    agent_id = validate_storage_id(agent_id, field_name="agent")
     base = _AGENTS_ROOT / agent_id
     if not base.is_dir():
         raise FileNotFoundError(f"Unknown agent {agent_id!r} ({base})")
@@ -249,7 +252,7 @@ def get_agent_tool_policy(agent_id: str) -> dict[str, Any] | None:
     """
     try:
         cfg = load_agent(agent_id)
-    except FileNotFoundError:
+    except (FileNotFoundError, ValueError):
         return None
 
     data = cfg.tools_yaml_data if isinstance(cfg.tools_yaml_data, dict) else {}

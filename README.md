@@ -149,6 +149,35 @@ Bind address: set `GATEWAY_HOST` (for example a Tailscale IP) so the gateway doe
 
 ---
 
+## Endpoint inventory
+
+Current `main.py` routes:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/health` | unauthenticated health/status |
+| `POST` | `/ingest` | normalise, classify, route, and return a gateway response |
+| `POST` | `/plans/propose` | policy-check and store a proposed plan; no execution |
+| `POST` | `/plans/from-message` | deterministic frontend helper that creates a proposed plan; no approval or execution |
+| `GET` | `/plans/pending` | list pending plan ids |
+| `GET` | `/plans/pending/{plan_id}` | read one pending plan |
+| `POST` | `/plans/{plan_id}/approve` | move pending plan to approved; no execution |
+| `POST` | `/plans/{plan_id}/reject` | move pending plan to rejected |
+| `POST` | `/plans/{plan_id}/execute` | execute an approved plan through registry/schema/sandbox checks |
+| `GET` | `/workspaces?state=active\|completed\|rejected` | list read-only workspace summaries |
+| `GET` | `/workspaces/{state}/{task_id}` | read one workspace summary |
+| `GET` | `/workspaces/{state}/{task_id}/files/{filename}` | read one known workspace artifact |
+| `GET` | `/logs` | list audit entries |
+| `GET` | `/events` | list audit entries where `kind == "event"` |
+| `GET` | `/tools` | list registry entries in all lifecycle states |
+| `GET` | `/tools/{name}/{version}` | inspect one registry entry |
+| `POST` | `/tools/propose` | create a proposed registry entry |
+| `POST` | `/tools/approve` | move proposed tool to approved |
+| `POST` | `/tools/install` | move approved tool to installed |
+| `POST` | `/tools/reject` | reject a proposed tool |
+
+---
+
 ## Environment variables (from `.env.example`)
 
 | Variable | Purpose |
@@ -206,6 +235,8 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 
 - Start the gateway first with `python main.py`.
 - Run `powershell -ExecutionPolicy Bypass -File .\scripts\test_plan_api.ps1`.
+- On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
+- `python scripts/test_plans_from_message_no_execute.py` is a local regression test that fails if `/plans/from-message` crosses into tool execution.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.

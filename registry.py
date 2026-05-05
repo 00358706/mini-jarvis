@@ -264,6 +264,9 @@ _seed_builtin(
     input_schema={
         "root": {"type": "string", "required": False},
         "max_results": {"type": "integer", "required": False},
+        "include_hidden": {"type": "boolean", "required": False},
+        "include_globs": {"type": "array", "required": False},
+        "exclude_dirs": {"type": "array", "required": False},
     },
     permissions=["file:list"],
 )
@@ -276,6 +279,8 @@ _seed_builtin(
         "root": {"type": "string", "required": False},
         "max_results": {"type": "integer", "required": False},
         "max_file_size_bytes": {"type": "integer", "required": False},
+        "include_globs": {"type": "array", "required": False},
+        "exclude_dirs": {"type": "array", "required": False},
     },
     permissions=["file:search"],
 )

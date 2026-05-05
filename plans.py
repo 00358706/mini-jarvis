@@ -7,6 +7,7 @@ No model calls, no registry writes, no sandbox. Used by policy and approvals.
 from __future__ import annotations
 
 import secrets
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -32,6 +33,33 @@ PlanStatus = Literal[
     "rejected",
     "failed",
 ]
+
+_SAFE_STORAGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+
+
+def validate_storage_id(value: str, *, field_name: str = "id") -> str:
+    """
+    Validate ids used as filesystem path segments.
+
+    These ids are not paths: they must be a single conservative ASCII segment.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} must be non-empty")
+    if ".." in cleaned:
+        raise ValueError(f"{field_name} must not contain traversal ('..')")
+    if not _SAFE_STORAGE_ID_RE.fullmatch(cleaned):
+        raise ValueError(
+            f"{field_name} may contain only letters, numbers, underscore, dash, and dot"
+        )
+    return cleaned
+
+
+def validate_plan_id(plan_id: str) -> str:
+    """Validate a plan id before using it for storage."""
+    return validate_storage_id(plan_id, field_name="plan_id")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Models
@@ -74,6 +102,16 @@ class Plan(BaseModel):
     status: PlanStatus
 
     model_config = ConfigDict(extra="ignore")
+
+    @field_validator("plan_id")
+    @classmethod
+    def _plan_id_safe(cls, v: str) -> str:
+        return validate_plan_id(v)
+
+    @field_validator("agent")
+    @classmethod
+    def _agent_id_safe(cls, v: str) -> str:
+        return validate_storage_id(v, field_name="agent")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
