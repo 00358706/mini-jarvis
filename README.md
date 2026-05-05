@@ -210,9 +210,10 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.
 - `project_maintainer_agent` can be tested via `powershell -ExecutionPolicy Bypass -File .\scripts\test_project_agent_policy.ps1`.
-- Missing maintainer tools are expected to fail safely until those tools are installed in the registry.
 - `inspect_file` is a read-only maintainer tool (`file:read`) for small repository files.
 - `inspect_file` is repository-confined and executes through the sandbox worker path.
+- `list_project_files` is a read-only maintainer tool (`file:list`) that lists repository files without reading contents.
+- `search_repo` is a read-only maintainer tool (`file:search`) that does literal text search over repository text files.
 - `propose_patch` is a proposal-only maintainer tool (`file:proposal`).
 - `propose_patch` does not apply changes; human review/approval is still required.
 

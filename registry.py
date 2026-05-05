@@ -256,3 +256,26 @@ _seed_builtin(
     },
     permissions=["file:proposal"],
 )
+
+_seed_builtin(
+    name="list_project_files",
+    endpoint="internal://tools/list_project_files",
+    description="List repository files without reading contents (repo-confined).",
+    input_schema={
+        "root": {"type": "string", "required": False},
+        "max_results": {"type": "integer", "required": False},
+    },
+    permissions=["file:list"],
+)
+_seed_builtin(
+    name="search_repo",
+    endpoint="internal://tools/search_repo",
+    description="Literal text search in repository text files (repo-confined).",
+    input_schema={
+        "query": {"type": "string", "required": True},
+        "root": {"type": "string", "required": False},
+        "max_results": {"type": "integer", "required": False},
+        "max_file_size_bytes": {"type": "integer", "required": False},
+    },
+    permissions=["file:search"],
+)

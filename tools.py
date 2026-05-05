@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
+import fnmatch
+from datetime import datetime, timezone
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -296,6 +298,7 @@ async def sabnzbd_resume(args: dict) -> ToolResult:
 
 _INSPECT_MAX_BYTES = 100 * 1024
 _PATCH_MAX_BYTES = 100 * 1024
+_DEFAULT_TEXT_MAX_BYTES = 100 * 1024
 _SECRET_BASENAMES = {
     ".env",
     ".env.local",
@@ -309,6 +312,7 @@ _SECRET_BASENAMES = {
     ".pypirc",
 }
 _SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
+_SECRET_NAME_SUBSTRINGS = ("token", "password", "secret", "credential", "apikey", "api_key")
 
 
 def _repo_root() -> Path:
@@ -321,7 +325,86 @@ def _is_secret_name(path_obj: Path) -> bool:
         return True
     if name.endswith(_SECRET_SUFFIXES):
         return True
+    if any(s in name for s in _SECRET_NAME_SUBSTRINGS):
+        return True
     return False
+
+
+def _resolve_repo_path(
+    *,
+    raw_path: str,
+    repo_root: Path,
+) -> tuple[Path | None, str | None]:
+    """
+    Resolve a user-supplied path against repo_root with traversal protection.
+    Returns (resolved_path, error_message).
+    """
+    requested = raw_path.strip()
+    pure = PurePath(requested)
+    if ".." in pure.parts:
+        return None, "Path traversal ('..') is not allowed."
+
+    requested_path = Path(requested)
+    if requested_path.is_absolute():
+        candidate = requested_path.resolve()
+    else:
+        candidate = (repo_root / requested_path).resolve()
+
+    try:
+        candidate.relative_to(repo_root)
+    except ValueError:
+        return None, "Path must stay inside the repository root."
+
+    return candidate, None
+
+
+def _normalize_globs(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        v = value.strip()
+        return [v] if v else []
+    if isinstance(value, list):
+        out: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                s = item.strip()
+                if s:
+                    out.append(s)
+        return out
+    return []
+
+
+def _normalize_str_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        v = value.strip()
+        return [v] if v else []
+    if isinstance(value, list):
+        out: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                s = item.strip()
+                if s:
+                    out.append(s)
+        return out
+    return []
+
+
+def _matches_any_glob(path_str: str, globs: list[str]) -> bool:
+    if not globs:
+        return True
+    return any(fnmatch.fnmatch(path_str, g) for g in globs)
+
+
+def _is_probably_binary(path_obj: Path) -> bool:
+    try:
+        with path_obj.open("rb") as f:
+            chunk = f.read(4096)
+        return b"\x00" in chunk
+    except OSError:
+        return True
 
 
 async def inspect_file(args: dict) -> ToolResult:
@@ -343,20 +426,14 @@ async def inspect_file(args: dict) -> ToolResult:
         )
 
     repo_root = _repo_root()
-    requested_path = Path(requested)
-    if requested_path.is_absolute():
-        candidate = requested_path.resolve()
-    else:
-        candidate = (repo_root / requested_path).resolve()
-
-    try:
-        candidate.relative_to(repo_root)
-    except ValueError:
+    candidate, err = _resolve_repo_path(raw_path=requested, repo_root=repo_root)
+    if err:
         return ToolResult(
             tool_name="inspect_file",
             success=False,
-            error="Path must stay inside the repository root.",
+            error=err,
         )
+    assert candidate is not None
 
     if _is_secret_name(candidate):
         return ToolResult(
@@ -444,20 +521,15 @@ async def propose_patch(args: dict) -> ToolResult:
         )
 
     repo_root = _repo_root()
-    requested_path = Path(requested)
-    if requested_path.is_absolute():
-        candidate = requested_path.resolve()
-    else:
-        candidate = (repo_root / requested_path).resolve()
-
-    try:
-        rel_path = candidate.relative_to(repo_root)
-    except ValueError:
+    candidate, err = _resolve_repo_path(raw_path=requested, repo_root=repo_root)
+    if err:
         return ToolResult(
             tool_name="propose_patch",
             success=False,
-            error="Path must stay inside the repository root.",
+            error=err,
         )
+    assert candidate is not None
+    rel_path = candidate.relative_to(repo_root)
 
     if _is_secret_name(candidate):
         return ToolResult(
@@ -479,6 +551,246 @@ async def propose_patch(args: dict) -> ToolResult:
     )
 
 
+async def list_project_files(args: dict) -> ToolResult:
+    repo_root = _repo_root()
+
+    raw_root = args.get("root", ".")
+    if not isinstance(raw_root, str) or not raw_root.strip():
+        return ToolResult(
+            tool_name="list_project_files",
+            success=False,
+            error="Field 'root' must be a string.",
+        )
+
+    raw_max = args.get("max_results", 200)
+    max_results = 200
+    if isinstance(raw_max, int):
+        max_results = raw_max
+    elif isinstance(raw_max, str) and raw_max.strip().isdigit():
+        max_results = int(raw_max.strip())
+    if max_results < 1:
+        max_results = 1
+    if max_results > 1000:
+        max_results = 1000
+
+    include_hidden = bool(args.get("include_hidden", False))
+    include_globs = _normalize_globs(args.get("include_globs")) or [
+        "*.py",
+        "*.md",
+        "*.ps1",
+        "*.yaml",
+        "*.yml",
+        "*.json",
+    ]
+    exclude_dirs = _normalize_str_list(args.get("exclude_dirs")) or [
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "data/workspaces",
+        "data/plans",
+    ]
+
+    root_path, err = _resolve_repo_path(raw_path=raw_root, repo_root=repo_root)
+    if err:
+        return ToolResult(tool_name="list_project_files", success=False, error=err)
+    assert root_path is not None
+    if not root_path.is_dir():
+        return ToolResult(
+            tool_name="list_project_files",
+            success=False,
+            error=f"Root is not a directory: {raw_root}",
+        )
+
+    exclude_prefixes = []
+    for d in exclude_dirs:
+        d_norm = d.strip().strip("/").strip("\\")
+        if d_norm:
+            exclude_prefixes.append(d_norm.replace("\\", "/") + "/")
+
+    results: list[dict[str, Any]] = []
+    for p in root_path.rglob("*"):
+        if len(results) >= max_results:
+            break
+        try:
+            if p.is_dir():
+                continue
+            rel = p.relative_to(repo_root)
+        except Exception:
+            continue
+
+        rel_str = str(rel).replace("\\", "/")
+
+        if not include_hidden:
+            if any(part.startswith(".") for part in rel.parts):
+                continue
+
+        # directory exclusions (prefix match)
+        if any(rel_str.startswith(pref) for pref in exclude_prefixes):
+            continue
+
+        if _is_secret_name(p):
+            continue
+
+        if not _matches_any_glob(p.name, include_globs) and not _matches_any_glob(rel_str, include_globs):
+            continue
+
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+
+        results.append(
+            {
+                "path": rel_str,
+                "size_bytes": int(st.st_size),
+                "modified_utc": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+            }
+        )
+
+    return ToolResult(
+        tool_name="list_project_files",
+        success=True,
+        data={"count": len(results), "files": results},
+    )
+
+
+async def search_repo(args: dict) -> ToolResult:
+    repo_root = _repo_root()
+
+    raw_query = args.get("query")
+    if not isinstance(raw_query, str) or not raw_query.strip():
+        return ToolResult(
+            tool_name="search_repo",
+            success=False,
+            error="Field 'query' must be a non-empty string.",
+        )
+    query = raw_query.strip()
+    if len(query) > 200:
+        return ToolResult(
+            tool_name="search_repo",
+            success=False,
+            error="Query is too long (max 200 characters).",
+        )
+
+    raw_root = args.get("root", ".")
+    if not isinstance(raw_root, str) or not raw_root.strip():
+        return ToolResult(tool_name="search_repo", success=False, error="Field 'root' must be a string.")
+
+    raw_max = args.get("max_results", 50)
+    max_results = 50
+    if isinstance(raw_max, int):
+        max_results = raw_max
+    elif isinstance(raw_max, str) and raw_max.strip().isdigit():
+        max_results = int(raw_max.strip())
+    if max_results < 1:
+        max_results = 1
+    if max_results > 500:
+        max_results = 500
+
+    raw_max_size = args.get("max_file_size_bytes", _DEFAULT_TEXT_MAX_BYTES)
+    max_size = _DEFAULT_TEXT_MAX_BYTES
+    if isinstance(raw_max_size, int):
+        max_size = raw_max_size
+    elif isinstance(raw_max_size, str) and raw_max_size.strip().isdigit():
+        max_size = int(raw_max_size.strip())
+    if max_size < 1:
+        max_size = 1
+    if max_size > 500_000:
+        max_size = 500_000
+
+    include_globs = _normalize_globs(args.get("include_globs")) or [
+        "*.py",
+        "*.md",
+        "*.ps1",
+        "*.yaml",
+        "*.yml",
+        "*.json",
+    ]
+    exclude_dirs = _normalize_str_list(args.get("exclude_dirs")) or [
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "data/workspaces",
+        "data/plans",
+    ]
+
+    root_path, err = _resolve_repo_path(raw_path=raw_root, repo_root=repo_root)
+    if err:
+        return ToolResult(tool_name="search_repo", success=False, error=err)
+    assert root_path is not None
+    if not root_path.is_dir():
+        return ToolResult(tool_name="search_repo", success=False, error=f"Root is not a directory: {raw_root}")
+
+    exclude_prefixes = []
+    for d in exclude_dirs:
+        d_norm = d.strip().strip("/").strip("\\")
+        if d_norm:
+            exclude_prefixes.append(d_norm.replace("\\", "/") + "/")
+
+    matches: list[dict[str, Any]] = []
+    files_scanned = 0
+    for p in root_path.rglob("*"):
+        if len(matches) >= max_results:
+            break
+        try:
+            if p.is_dir():
+                continue
+            rel = p.relative_to(repo_root)
+        except Exception:
+            continue
+
+        rel_str = str(rel).replace("\\", "/")
+
+        if any(rel_str.startswith(pref) for pref in exclude_prefixes):
+            continue
+        if _is_secret_name(p):
+            continue
+        if not _matches_any_glob(p.name, include_globs) and not _matches_any_glob(rel_str, include_globs):
+            continue
+
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if st.st_size > max_size:
+            continue
+        if _is_probably_binary(p):
+            continue
+
+        files_scanned += 1
+        try:
+            with p.open("r", encoding="utf-8", errors="replace") as f:
+                for idx, line in enumerate(f, start=1):
+                    if query in line:
+                        excerpt = line.strip()
+                        if len(excerpt) > 240:
+                            excerpt = excerpt[:240] + "…"
+                        matches.append(
+                            {
+                                "path": rel_str,
+                                "line": idx,
+                                "excerpt": excerpt,
+                            }
+                        )
+                        if len(matches) >= max_results:
+                            break
+        except OSError:
+            continue
+
+    return ToolResult(
+        tool_name="search_repo",
+        success=True,
+        data={
+            "query": query,
+            "files_scanned": files_scanned,
+            "match_count": len(matches),
+            "matches": matches,
+        },
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Registry — name → implementation (subprocess worker resolves by name)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -493,6 +805,8 @@ _TOOL_FUNCS: dict[str, Any] = {
     "sabnzbd_resume": sabnzbd_resume,
     "inspect_file": inspect_file,
     "propose_patch": propose_patch,
+    "list_project_files": list_project_files,
+    "search_repo": search_repo,
 }
 
 
