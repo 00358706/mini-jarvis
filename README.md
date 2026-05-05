@@ -232,6 +232,16 @@ They do not execute tools or mutate workspace files.
 - `GET /workspaces/{state}/{task_id}` — review summary including `PLAN.json` / `POLICY_DECISION.json` (if present).
 - `GET /workspaces/{state}/{task_id}/files/{filename}` — read one known standard workspace file (e.g. `RESULT.md`).
 
+### Open WebUI integration (proposal-only)
+This repo includes a simple wrapper script that **proposes plans only** (no approval, no execution).
+Approval and execution remain separate gateway steps (`/plans/{plan_id}/approve`, `/plans/{plan_id}/execute`).
+
+- Wrapper: `integrations/openwebui/mini_jarvis_plan_propose.py`
+- Environment variables:
+  - `MINI_JARVIS_BASE_URL` (default `http://127.0.0.1:8000`)
+  - `MINI_JARVIS_API_KEY` (required; same value as gateway `GATEWAY_API_KEY`)
+  - `MINI_JARVIS_AGENT` (default `project_maintainer_agent`)
+
 ---
 
 ## Security invariants
