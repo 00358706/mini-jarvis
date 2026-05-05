@@ -88,6 +88,15 @@ from models import (
 from plans import Plan
 from policy import evaluate_plan
 from tools import run_installed_tool
+from workspace import (
+    create_workspace,
+    move_workspace,
+    workspace_path,
+    write_plan,
+    write_policy_decision,
+    write_request,
+    write_result,
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
@@ -107,6 +116,27 @@ def _installed_tool_names() -> set[str]:
 
 class PlanRejectRequest(BaseModel):
     reason: str | None = None
+
+
+def _workspace_exists_active(task_id: str) -> bool:
+    return workspace_path(task_id, state="active").is_dir()
+
+
+def _ensure_workspace_for_plan(plan: Plan) -> None:
+    if not _workspace_exists_active(plan.plan_id):
+        create_workspace(
+            task_id=plan.plan_id,
+            request_text="# Request\n\nPlan proposed via /plans/propose.\n",
+            metadata={"source": "/plans/propose", "plan_id": plan.plan_id},
+        )
+    else:
+        write_request(plan.plan_id, "# Request\n\nPlan proposed via /plans/propose.\n")
+
+
+def _write_workspace_policy_state(plan: Plan, decision) -> None:
+    _ensure_workspace_for_plan(plan)
+    write_plan(plan.plan_id, plan)
+    write_policy_decision(plan.plan_id, decision)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -259,6 +289,27 @@ async def plans_propose(plan: Plan):
     decision = evaluate_plan(plan, installed_tools=_installed_tool_names())
     policy_out = {"allowed": decision.allowed, "reasons": decision.reasons}
 
+    try:
+        _write_workspace_policy_state(plan, decision)
+        if not decision.allowed:
+            write_result(
+                plan.plan_id,
+                "# Result\n\nPolicy rejected the proposed plan.\n",
+            )
+            if _workspace_exists_active(plan.plan_id):
+                move_workspace(plan.plan_id, "rejected")
+    except Exception as exc:
+        logger.exception("plans/propose workspace mirror failed for %s", plan.plan_id)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "status": "workspace_write_error",
+                "plan_id": plan.plan_id,
+                "policy": policy_out,
+                "error": f"Workspace mirror failed: {exc}",
+            },
+        )
+
     if not decision.allowed:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -271,6 +322,23 @@ async def plans_propose(plan: Plan):
 
     if plan.requires_approval:
         save_pending_plan(plan)
+        try:
+            approval_path = workspace_path(plan.plan_id, state="active") / "APPROVAL.md"
+            approval_path.write_text(
+                "# Approval\n\nStatus: pending_approval\n",
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.exception("plans/propose approval workspace write failed for %s", plan.plan_id)
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={
+                    "status": "workspace_write_error",
+                    "plan_id": plan.plan_id,
+                    "policy": policy_out,
+                    "error": f"Workspace mirror failed: {exc}",
+                },
+            )
         await audit.append(
             kind="plan",
             input_summary=f"Plan proposed: {plan.plan_id}",
@@ -282,6 +350,22 @@ async def plans_propose(plan: Plan):
             "policy": policy_out,
         }
 
+    try:
+        write_result(
+            plan.plan_id,
+            "# Result\n\nPolicy allowed. Execution was not started from /plans/propose.\n",
+        )
+    except Exception as exc:
+        logger.exception("plans/propose result workspace write failed for %s", plan.plan_id)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "status": "workspace_write_error",
+                "plan_id": plan.plan_id,
+                "policy": policy_out,
+                "error": f"Workspace mirror failed: {exc}",
+            },
+        )
     return {
         "status": "policy_allowed_not_executed",
         "plan_id": plan.plan_id,
