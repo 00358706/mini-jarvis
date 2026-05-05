@@ -40,7 +40,8 @@ async def _main() -> None:
     from tools import run_tool_by_name
 
     result = await run_tool_by_name(name, args)
-    sys.stdout.write(result.model_dump_json())
+    payload = json.dumps(result.model_dump(mode="json"), ensure_ascii=True)
+    sys.stdout.write(payload)
     sys.stdout.flush()
 
 

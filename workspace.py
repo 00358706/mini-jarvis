@@ -219,7 +219,11 @@ def move_workspace(task_id: str, destination: _MoveDest) -> Path:
     dst_parent.mkdir(parents=True, exist_ok=True)
     dst = dst_parent / task_id
     if dst.exists():
-        raise FileExistsError(f"Target already exists: {dst}")
+        # Idempotent for the same task id: replace only this destination folder.
+        if dst.is_dir():
+            shutil.rmtree(dst)
+        else:
+            dst.unlink()
 
     shutil.move(str(src), str(dst))
     return dst
