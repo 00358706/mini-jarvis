@@ -570,6 +570,24 @@ async def plans_execute(plan_id: str):
         input_summary=f"Plan execution started: {plan_id}",
         result_summary="status=executing",
     )
+    try:
+        append_execution_log(
+            plan_id,
+            {
+                "event": "execution_started",
+                "plan_id": plan_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        logger.warning("plans/execute workspace start log failed for %s: %s", plan_id, exc)
+        await audit.append(
+            kind="plan",
+            input_summary=f"Workspace update failed on execute start: {plan_id}",
+            result_summary=f"warning={str(exc)[:200]}",
+        )
 
     step_results: list[dict] = []
     for step in plan.steps:
@@ -585,10 +603,12 @@ async def plans_execute(plan_id: str):
             append_execution_log(
                 plan_id,
                 {
+                    "event": "step_completed",
+                    "plan_id": plan_id,
                     "step_id": step.step_id,
                     "tool": step.tool,
-                    "status": step_payload["status"],
-                    "result": step_payload["result"],
+                    "success": tool_result.success,
+                    "error": tool_result.error,
                 },
             )
         except FileNotFoundError:
@@ -618,16 +638,35 @@ async def plans_execute(plan_id: str):
 
     mark_executed(plan_id, result=response_body)
     try:
+        append_execution_log(
+            plan_id,
+            {
+                "event": "execution_completed",
+                "plan_id": plan_id,
+                "status": "executed",
+            },
+        )
         ok_steps = sum(1 for s in step_results if s["status"] == "ok")
         err_steps = len(step_results) - ok_steps
+        step_lines = "\n".join(
+            f"- `{s['step_id']}` / `{s['tool']}`: {s['status']}"
+            for s in step_results
+        ) or "- (no steps)"
         write_result(
             plan_id,
             (
                 "# Result\n\n"
-                f"Plan executed.\n\n"
+                f"- plan id: `{plan_id}`\n"
+                f"- status: `executed`\n\n"
+                "## Step summary\n\n"
+                f"{step_lines}\n\n"
+                "## Totals\n\n"
                 f"- Steps total: {len(step_results)}\n"
                 f"- Steps ok: {ok_steps}\n"
                 f"- Steps error: {err_steps}\n"
+                "\n"
+                "Execution ran through the installed tool path with registry/schema checks "
+                "and sandboxed tool execution.\n"
             ),
         )
         if _workspace_exists_active(plan_id):
