@@ -242,6 +242,17 @@ Approval and execution remain separate gateway steps (`/plans/{plan_id}/approve`
   - `MINI_JARVIS_API_KEY` (required; same value as gateway `GATEWAY_API_KEY`)
   - `MINI_JARVIS_AGENT` (default `project_maintainer_agent`)
 
+### Open WebUI integration (review/approve/execute wrapper)
+Separate wrapper for reviewing an existing plan and explicitly calling approval/execution endpoints.
+Proposal, approval, and execution are intentionally separate steps.
+
+- Wrapper: `integrations/openwebui/mini_jarvis_plan_review.py`
+- Commands:
+  - `show <plan_id>`
+  - `approve <plan_id> --confirm`
+  - `reject <plan_id> --confirm`
+  - `execute <plan_id> --confirm`
+
 ---
 
 ## Security invariants
