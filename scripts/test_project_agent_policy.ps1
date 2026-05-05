@@ -10,7 +10,7 @@ $Headers = @{
     "Content-Type" = "application/json"
 }
 
-$MissingToolPlanId = "manual_project_agent_missing_tool_001"
+$InspectFilePlanId = "manual_project_agent_inspect_file_001"
 $ForbiddenToolPlanId = "manual_project_agent_forbidden_tool_001"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
@@ -78,42 +78,35 @@ function Get-ErrorBody {
 }
 
 Write-Host "Base URL: $BaseUrl"
-Remove-TestWorkspacePaths -PlanId $MissingToolPlanId
+Remove-TestWorkspacePaths -PlanId $InspectFilePlanId
 Remove-TestWorkspacePaths -PlanId $ForbiddenToolPlanId
 
 Write-Host ""
-Write-Host "--- Case 1: strict-allowed but likely missing registry install (inspect_file) ---"
-$BodyMissing = New-PlanBody -PlanId $MissingToolPlanId -ToolName "inspect_file" -ToolArgs @{ path = "README.md" }
+Write-Host "--- Case 1: strict-allowed registered tool (inspect_file) ---"
+$BodyInspect = New-PlanBody -PlanId $InspectFilePlanId -ToolName "inspect_file" -ToolArgs @{ path = "README.md" }
 try {
-    $RespMissing = Invoke-RestMethod -Uri "$BaseUrl/plans/propose" -Method Post -Headers $Headers -Body $BodyMissing
-    $RespMissing | ConvertTo-Json -Depth 10
-    throw "Case 1 failed. Expected likely HTTP 400 policy_rejected due to missing registry install, but request succeeded with status '$($RespMissing.status)'."
+    $RespInspect = Invoke-RestMethod -Uri "$BaseUrl/plans/propose" -Method Post -Headers $Headers -Body $BodyInspect
+    $RespInspect | ConvertTo-Json -Depth 10
+
+    if ($RespInspect.status -ne "pending_approval") {
+        throw "Case 1 failed. Expected status=pending_approval, got '$($RespInspect.status)'."
+    }
+    if ($RespInspect.plan_id -ne $InspectFilePlanId) {
+        throw "Case 1 failed. Expected plan_id=$InspectFilePlanId, got '$($RespInspect.plan_id)'."
+    }
+    if (-not $RespInspect.policy -or $RespInspect.policy.allowed -ne $true) {
+        throw "Case 1 failed. Expected policy.allowed=true."
+    }
+    Write-Host "Case 1 passed: inspect_file accepted as pending approval with policy.allowed=true."
 } catch {
     $resp = $_.Exception.Response
     if ($resp -and $resp.StatusCode.value__ -eq 400) {
         $body = Get-ErrorBody $_
-        $exceptionMessage = [string]$_.Exception.Message
         Write-Host "HTTP 400 response body:"
         Write-Host $body
-        if ([string]::IsNullOrWhiteSpace($body)) {
-            Write-Host "HTTP 400 exception message:"
-            Write-Host $exceptionMessage
-        }
-        $ok = (
-            ($body -match 'not installed') -or
-            ($body -match 'unknown tool') -or
-            ($body -match 'policy_rejected') -or
-            ($body -match 'registry') -or
-            ($exceptionMessage -match '400')
-        )
-        if ($ok) {
-            Write-Host "Case 1 passed: safe failure for missing/uninstalled maintainer tool."
-        } else {
-            throw "Case 1 failed. Received HTTP 400 but did not match expected safe-failure markers."
-        }
-    } else {
-        throw
+        throw "Case 1 failed. inspect_file should be allowed and return pending_approval."
     }
+    throw
 }
 
 Write-Host ""
@@ -122,7 +115,10 @@ $BodyForbidden = New-PlanBody -PlanId $ForbiddenToolPlanId -ToolName "radarr_sea
 try {
     $RespForbidden = Invoke-RestMethod -Uri "$BaseUrl/plans/propose" -Method Post -Headers $Headers -Body $BodyForbidden
     $RespForbidden | ConvertTo-Json -Depth 10
-    throw "Case 2 failed. Expected HTTP 400 policy_rejected for strict allowlist block, but request succeeded with status '$($RespForbidden.status)'."
+    if ($RespForbidden.status -eq "pending_approval") {
+        throw "Case 2 failed. Expected rejection (not pending_approval) for strict allowlist block, but got pending_approval."
+    }
+    throw "Case 2 failed. Expected rejection for strict allowlist block, but request succeeded with status '$($RespForbidden.status)'."
 } catch {
     $resp = $_.Exception.Response
     if ($resp -and $resp.StatusCode.value__ -eq 400) {

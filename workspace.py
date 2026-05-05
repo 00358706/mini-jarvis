@@ -33,6 +33,177 @@ _EXECUTION_LOG = "EXECUTION_LOG.jsonl"
 _RESULT = "RESULT.md"
 _PATCH_PROPOSAL = "PATCH_PROPOSAL.md"
 
+_WORKSPACE_STATES: set[str] = {"active", "completed", "rejected"}
+_STANDARD_WORKSPACE_FILES: tuple[str, ...] = (
+    _REQUEST,
+    _ROUTE,
+    _AGENT,
+    _CONTEXT,
+    _PLAN,
+    _POLICY_DECISION,
+    _APPROVAL,
+    _EXECUTION_LOG,
+    _RESULT,
+    _PATCH_PROPOSAL,
+)
+
+_WORKSPACE_FILE_SET: set[str] = set(_STANDARD_WORKSPACE_FILES)
+
+
+def _validate_state(state: str) -> Literal["active", "completed", "rejected"]:
+    if state not in _WORKSPACE_STATES:
+        raise ValueError(f"Invalid workspace state: {state!r}")
+    return state  # type: ignore[return-value]
+
+
+def _validate_filename(filename: str) -> str:
+    if not isinstance(filename, str) or not filename:
+        raise ValueError("Filename is required.")
+    if "/" in filename or "\\" in filename:
+        raise ValueError("Filename must not contain path separators.")
+    if ".." in filename:
+        raise ValueError("Filename must not contain traversal ('..').")
+    # Absolute paths are rejected; this should cover Windows drive letters too.
+    if Path(filename).is_absolute():
+        raise ValueError("Filename must be a plain file name, not an absolute path.")
+    if filename not in _WORKSPACE_FILE_SET:
+        raise ValueError(f"Unknown workspace filename: {filename!r}")
+    return filename
+
+
+def list_workspaces(
+    state: Literal["active", "completed", "rejected"],
+) -> list[dict]:
+    """
+    List workspaces in a state as review summaries (read-only).
+    """
+    state = _validate_state(state)
+    state_dir = _state_dir(state)  # may not exist
+    if not state_dir.is_dir():
+        return []
+
+    summaries: list[dict] = []
+    for entry in sorted(state_dir.iterdir(), key=lambda p: p.name):
+        if not entry.is_dir():
+            continue
+        summaries.append(read_workspace_summary(entry.name, state))
+    return summaries
+
+
+def read_workspace_summary(
+    task_id: str,
+    state: Literal["active", "completed", "rejected"],
+) -> dict:
+    """
+    Return a compact review summary for a single workspace.
+    """
+    state = _validate_state(state)
+    root = workspace_path(task_id, state)
+    if not root.is_dir():
+        raise FileNotFoundError(f"No {state} workspace for task_id={task_id!r}.")
+
+    rel_ws_path = str(root.relative_to(_WORKSPACES_ROOT)).replace("\\", "/")
+
+    present: list[str] = []
+    missing: list[str] = []
+    for fn in _STANDARD_WORKSPACE_FILES:
+        if (root / fn).is_file():
+            present.append(fn)
+        else:
+            missing.append(fn)
+
+    plan_json: dict[str, Any] | None = None
+    policy_decision_json: dict[str, Any] | None = None
+    if (root / _PLAN).is_file():
+        try:
+            plan_json = json.loads((root / _PLAN).read_text(encoding="utf-8"))
+        except Exception:
+            plan_json = None
+    if (root / _POLICY_DECISION).is_file():
+        try:
+            policy_decision_json = json.loads(
+                (root / _POLICY_DECISION).read_text(encoding="utf-8")
+            )
+        except Exception:
+            policy_decision_json = None
+
+    approval_text: str | None = None
+    if (root / _APPROVAL).is_file():
+        approval_text = (root / _APPROVAL).read_text(encoding="utf-8", errors="replace")
+
+    result_text: str | None = None
+    if (root / _RESULT).is_file():
+        result_text = (root / _RESULT).read_text(encoding="utf-8", errors="replace")
+
+    patch_proposal_present = (root / _PATCH_PROPOSAL).is_file()
+
+    execution_log_count = 0
+    if (root / _EXECUTION_LOG).is_file():
+        try:
+            with (root / _EXECUTION_LOG).open("r", encoding="utf-8", errors="replace") as f:
+                execution_log_count = sum(1 for _ in f)
+        except Exception:
+            execution_log_count = 0
+
+    return {
+        "task_id": task_id,
+        "state": state,
+        "path": rel_ws_path,
+        "files": {"present": present, "missing": missing},
+        "plan_json": plan_json,
+        "policy_decision_json": policy_decision_json,
+        "approval_text": approval_text,
+        "result_text": result_text,
+        "patch_proposal_present": patch_proposal_present,
+        "execution_log_count": execution_log_count,
+    }
+
+
+def read_workspace_file(
+    task_id: str,
+    state: Literal["active", "completed", "rejected"],
+    filename: str,
+) -> dict:
+    """
+    Return a single workspace file's content (read-only), with safe filename validation.
+    """
+    state = _validate_state(state)
+    root = workspace_path(task_id, state)
+    if not root.is_dir():
+        raise FileNotFoundError(f"No {state} workspace for task_id={task_id!r}.")
+
+    filename = _validate_filename(filename)
+    file_path = (root / filename).resolve()
+    ws_root_resolved = root.resolve()
+    try:
+        file_path.relative_to(ws_root_resolved)
+    except ValueError:
+        raise ValueError("Resolved file escaped workspace root.")
+
+    exists = file_path.is_file()
+    content_type: str
+    if filename.endswith(".md"):
+        content_type = "markdown"
+    elif filename.endswith(".json"):
+        content_type = "json"
+    elif filename.endswith(".jsonl"):
+        content_type = "jsonl"
+    else:
+        content_type = "text"
+
+    content: str | None = None
+    if exists:
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+
+    return {
+        "task_id": task_id,
+        "state": state,
+        "filename": filename,
+        "exists": exists,
+        "content_type": content_type,
+        "content": content,
+    }
+
 _MoveDest = Literal["completed", "rejected"]
 _STATE = Literal["active", "completed", "rejected"]
 

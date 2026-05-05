@@ -93,8 +93,11 @@ from tools import run_installed_tool
 from workspace import (
     append_execution_log,
     create_workspace,
+    list_workspaces,
     move_workspace,
     write_patch_proposal,
+    read_workspace_summary,
+    read_workspace_file,
     workspace_path,
     write_approval,
     write_agent,
@@ -767,6 +770,52 @@ async def plans_execute(plan_id: str):
     )
 
     return response_body
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Workspace review API (read-only)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+_WORKSPACE_STATE_VALUES = {"active", "completed", "rejected"}
+_WORKSPACE_FILENAME_TRAILER_LIMIT = 255
+
+
+@app.get("/workspaces")
+async def workspaces_list(state: str = Query(default="active")):
+    """
+    Workspace review API — list readable workspace summaries (read-only).
+    """
+    if state not in _WORKSPACE_STATE_VALUES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state.")
+    summaries = list_workspaces(state)  # type: ignore[arg-type]
+    return {"count": len(summaries), "workspaces": summaries}
+
+
+@app.get("/workspaces/{state}/{task_id}")
+async def workspace_summary_endpoint(state: str, task_id: str):
+    if state not in _WORKSPACE_STATE_VALUES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state.")
+    try:
+        return read_workspace_summary(task_id=task_id, state=state)  # type: ignore[arg-type]
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
+
+
+@app.get("/workspaces/{state}/{task_id}/files/{filename}")
+async def workspace_file_endpoint(state: str, task_id: str, filename: str):
+    if state not in _WORKSPACE_STATE_VALUES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid state.")
+    if not filename or len(filename) > _WORKSPACE_FILENAME_TRAILER_LIMIT:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename.") from None
+    try:
+        return read_workspace_file(task_id=task_id, state=state, filename=filename)  # type: ignore[arg-type]
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
 
 # ──────────────────────────────────────────────────────────────────────────────

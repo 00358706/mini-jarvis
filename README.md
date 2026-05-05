@@ -216,6 +216,14 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `propose_patch` is a proposal-only maintainer tool (`file:proposal`).
 - `propose_patch` does not apply changes; human review/approval is still required.
 
+### Workspace Review API
+Read-only endpoints for inspecting `data/workspaces/*` planning state (protected by `X-API-Key`).
+They do not execute tools or mutate workspace files.
+
+- `GET /workspaces?state=active|completed|rejected` — list compact workspace summaries.
+- `GET /workspaces/{state}/{task_id}` — review summary including `PLAN.json` / `POLICY_DECISION.json` (if present).
+- `GET /workspaces/{state}/{task_id}/files/{filename}` — read one known standard workspace file (e.g. `RESULT.md`).
+
 ---
 
 ## Security invariants
