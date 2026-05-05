@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -87,7 +88,7 @@ from models import (
     ToolApprovalRequest,
     ToolProposal,
 )
-from plans import Plan
+from plans import Plan, PlanLimits, PlanStep, create_plan_id
 from policy import evaluate_plan
 from tools import run_installed_tool
 from workspace import (
@@ -127,6 +128,12 @@ def _installed_tool_names() -> set[str]:
 
 class PlanRejectRequest(BaseModel):
     reason: str | None = None
+
+
+class PlanFromMessageRequest(BaseModel):
+    message: str
+    agent: str
+    plan_id: str | None = None
 
 
 def _workspace_exists_active(task_id: str) -> bool:
@@ -485,6 +492,153 @@ async def plans_propose(plan: Plan):
         "plan_id": plan.plan_id,
         "policy": policy_out,
         "note": "Plan execution is not wired into this endpoint yet.",
+    }
+
+
+def _extract_simple_filename(message: str) -> str | None:
+    """
+    Extract a simple repo-relative filename token like README.md from message.
+    Rejects separators to avoid paths in this first version.
+    """
+    m = re.search(r"(?i)\b([A-Z0-9][A-Z0-9_.-]{0,127}\.[A-Z0-9]{1,8})\b", message)
+    if not m:
+        return None
+    token = m.group(1).strip()
+    if "/" in token or "\\" in token:
+        return None
+    return token
+
+
+def _build_project_maintainer_plan_from_message(
+    *,
+    message: str,
+    agent: str,
+    plan_id: str,
+) -> Plan:
+    """
+    Deterministic first version (no LLM planner): build a single-step Plan.
+    """
+    msg = (message or "").strip()
+    msg_l = msg.lower()
+
+    tool = "list_project_files"
+    args: dict = {"root": ".", "max_results": 200}
+    desc = "List repository files (safe discovery)."
+
+    # Explicitly ignore attempts to request non-maintainer tools.
+    if "radarr_search" in msg_l or "radarr" in msg_l or "sonarr" in msg_l or "sabnzbd" in msg_l:
+        tool = "list_project_files"
+        args = {"root": ".", "max_results": 200}
+        desc = "Safe fallback: list repository files (maintainer tools only)."
+    elif ("search" in msg_l) or ("find references" in msg_l) or ("find reference" in msg_l):
+        tool = "search_repo"
+        query = None
+        # Prefer extracting a token after "for", e.g. "search repo for PATCH_PROPOSAL.md"
+        mm = re.search(r"(?i)\bfor\s+['\"]?([A-Z0-9_.-]{1,200})['\"]?\b", msg)
+        if mm:
+            query = mm.group(1).strip()
+        if not query:
+            # Fall back to a short query derived from the message.
+            query = msg[:200]
+        args = {"query": query, "root": ".", "max_results": 50, "max_file_size_bytes": 100000}
+        desc = "Literal search over repository text files."
+    elif ("list files" in msg_l) or ("show files" in msg_l) or ("list project files" in msg_l):
+        tool = "list_project_files"
+        args = {"root": ".", "max_results": 200}
+        desc = "List repository files."
+    elif ("inspect" in msg_l) or ("read file" in msg_l) or ("read " in msg_l):
+        fn = _extract_simple_filename(msg)
+        if fn:
+            tool = "inspect_file"
+            args = {"path": fn}
+            desc = "Read a repository file for review."
+        else:
+            tool = "list_project_files"
+            args = {"root": ".", "max_results": 200}
+            desc = "Safe fallback: list repository files (no filename detected)."
+
+    summary = msg if msg else "Plan proposed from message."
+    if len(summary) > 200:
+        summary = summary[:200] + "…"
+
+    return Plan(
+        plan_id=plan_id,
+        summary=summary,
+        agent=agent,
+        risk="level_0",
+        requires_approval=True,
+        steps=[
+            PlanStep(step_id="step_1", tool=tool, args=args, description=desc),
+        ],
+        limits=PlanLimits(
+            max_tool_calls=6,
+            max_runtime_seconds=90,
+            allow_cloud=False,
+            allow_delete=False,
+        ),
+        status="proposed",
+    )
+
+
+@app.post("/plans/from-message")
+async def plans_from_message(req: PlanFromMessageRequest):
+    """
+    Frontend convenience endpoint for proposal creation only.
+    Builds a deterministic single-step plan and routes through /plans/propose logic.
+    Does not execute tools or approve plans.
+    """
+    agent = (req.agent or "").strip()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="agent is required.")
+
+    plan_id = (req.plan_id or "").strip() or create_plan_id()
+    message = (req.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="message is required.")
+
+    if agent == "project_maintainer_agent":
+        plan = _build_project_maintainer_plan_from_message(
+            message=message, agent=agent, plan_id=plan_id
+        )
+    else:
+        # Minimal first version: do not guess tools for unknown agents.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported agent for /plans/from-message: {agent!r}",
+        )
+
+    resp = await plans_propose(plan)
+    if isinstance(resp, JSONResponse):
+        # Mirror /plans/propose status code, but wrap with the Open WebUI friendly shape.
+        try:
+            body = json.loads((resp.body or b"{}").decode("utf-8", errors="replace"))
+        except Exception:
+            body = {}
+        status_text = body.get("status") or "policy_rejected"
+        policy_obj = body.get("policy") if isinstance(body, dict) else None
+        content = {
+            "status": status_text,
+            "plan_id": plan_id,
+            "agent": agent,
+            "policy": policy_obj,
+            "workspace": {
+                "state": "rejected",
+                "summary_url": f"/workspaces/rejected/{plan_id}",
+            },
+        }
+        return JSONResponse(status_code=resp.status_code, content=content)
+
+    # Normal pending_approval shape.
+    out = dict(resp) if isinstance(resp, dict) else {}
+    return {
+        "status": out.get("status", "pending_approval"),
+        "plan_id": out.get("plan_id", plan_id),
+        "agent": agent,
+        "policy": out.get("policy"),
+        "workspace": {
+            "state": "active",
+            "summary_url": f"/workspaces/active/{plan_id}",
+        },
     }
 
 

@@ -216,6 +216,13 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `search_repo` is a read-only maintainer tool (`file:search`) that does literal text search over repository text files.
 - `propose_patch` is a proposal-only maintainer tool (`file:proposal`).
 - `propose_patch` does not apply changes; human review/approval is still required.
+- If an agent references a tool that is not installed in the registry, policy/registry validation must fail safely before execution.
+
+### `POST /plans/from-message` (frontend convenience)
+Convenience endpoint for Open WebUI or other local frontends to **create a proposed plan from a user message**.
+It is deterministic (rule-based), does **not** approve plans, and does **not** execute tools.
+
+- `POST /plans/from-message` — builds a single-step plan and routes it through the same policy/workspace mirror as `POST /plans/propose`.
 
 ### Workspace Review API
 Read-only endpoints for inspecting `data/workspaces/*` planning state (protected by `X-API-Key`).
