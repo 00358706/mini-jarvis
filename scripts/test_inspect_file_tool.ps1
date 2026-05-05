@@ -54,7 +54,8 @@ $PlanBody = @{
 Write-Host ""
 Write-Host "--- POST /plans/propose ---"
 $Propose = Invoke-RestMethod -Uri "$BaseUrl/plans/propose" -Method Post -Headers $Headers -Body $PlanBody
-$Propose | ConvertTo-Json -Depth 10
+Write-Host ("status: " + $Propose.status)
+Write-Host ("plan_id: " + $Propose.plan_id)
 if ($Propose.status -ne "pending_approval") {
     throw "Expected pending_approval from /plans/propose, got '$($Propose.status)'."
 }
@@ -62,7 +63,8 @@ if ($Propose.status -ne "pending_approval") {
 Write-Host ""
 Write-Host "--- POST /plans/$PlanId/approve ---"
 $Approve = Invoke-RestMethod -Uri "$BaseUrl/plans/$PlanId/approve" -Method Post -Headers $Headers
-$Approve | ConvertTo-Json -Depth 10
+Write-Host ("status: " + $Approve.status)
+Write-Host ("plan_id: " + $Approve.plan_id)
 if ($Approve.status -ne "approved") {
     throw "Expected approved from /plans/{id}/approve, got '$($Approve.status)'."
 }
