@@ -209,6 +209,8 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.
+- `project_maintainer_agent` can be tested via `powershell -ExecutionPolicy Bypass -File .\scripts\test_project_agent_policy.ps1`.
+- Missing maintainer tools are expected to fail safely until those tools are installed in the registry.
 
 ---
 

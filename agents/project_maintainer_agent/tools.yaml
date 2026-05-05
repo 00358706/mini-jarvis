@@ -1,23 +1,27 @@
 # tools.yaml — tools this agent may reference in proposed plans.
 #
-# STATUS (current phase): The entries under planned_tools are conceptual only.
-# They are NOT registered in the gateway yet and MUST NOT be treated as
-# executable. A future registry may add inspect_file, summarize_file,
-# propose_patch, and check_invariants with proper schemas and lifecycle.
+# STATUS (current phase): entries under allowed_tools are proposal references
+# only. They do not grant execution authority. Plans still require registry
+# installed-tool presence, schema validation, approval, and sandbox execution.
 #
 # Schema:
-#   planned_tools:
+#   enforcement:
+#     mode: strict|advisory
+#   allowed_tools:
 #     - name: string
 #       version: string|null
 #       rationale: string
 #   constraints: ...
 
 description: >
-  Planned allowlist for when these tools exist in the registry and are installed.
-  Until then, plans may mention these names only as documentation of intent;
-  the gateway will reject unknown tools until they are implemented and installed.
+  Strict proposal allowlist for project maintenance planning. These names are
+  references only unless the same tools are installed in the registry.
+  Missing/uninstalled tools must fail safely at policy time.
 
-planned_tools:
+enforcement:
+  mode: strict
+
+allowed_tools:
   - name: inspect_file
     version: null
     rationale: Read or structure-aware inspection of a repository path (future).
@@ -33,5 +37,5 @@ planned_tools:
 
 constraints:
   agents_must_not_execute: true
-  conceptual_tools_not_in_registry: true
+  proposal_references_only_until_registry_install: true
   proposals_reference_registry_when_tools_exist: true
