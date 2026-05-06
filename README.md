@@ -349,6 +349,9 @@ Approval and execution remain via the gateway endpoints and wrappers.
 
 - `docs/wiki/README.md`
 
+## Project backlog
+Deferred ideas and future branch candidates live in [`docs/BACKLOG.md`](docs/BACKLOG.md). Backlog items are not active implementation instructions unless explicitly selected.
+
 ## Extending tools and routing
 
 - **New built-in tool**: implement in `tools.py`, register in `_TOOL_FUNCS`, seed or lifecycle through `registry`, extend `_INTENT_MAP` as needed, keep httpx calls behind `http_allowlist` checks.
