@@ -265,6 +265,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 
 - Start the gateway first with `python main.py`.
 - Run `powershell -ExecutionPolicy Bypass -File .\scripts\test_plan_api.ps1`.
+- `powershell -ExecutionPolicy Bypass -File .\scripts\test_external_ui_flow.ps1` simulates a safe external UI/client flow through proposal, review, explicit approval, explicit execution, and completed result review.
 - On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
 - `python scripts/test_plans_from_message_no_execute.py` is a local regression test that fails if `/plans/from-message` crosses into tool execution.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
