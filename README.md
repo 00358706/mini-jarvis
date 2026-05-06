@@ -145,6 +145,36 @@ python main.py
 # or: uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+## Python environment
+
+Recommended: use the project venv (`.venv`) so the gateway, smoke tests, and optional integration scripts use the same interpreter/dependencies.
+
+- Setup venv:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_venv.ps1
+```
+
+- Activate:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+- Run gateway:
+
+```powershell
+python main.py
+```
+
+- Run all smoke tests (gateway must already be running):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_all_tests.ps1
+```
+
+See `docs/ENVIRONMENT.md`.
+
 Bind address: set `GATEWAY_HOST` (for example a Tailscale IP) so the gateway does not listen more broadly than you intend.
 
 ---
@@ -286,6 +316,16 @@ Proposal, approval, and execution are intentionally separate steps.
   - `approve <plan_id> --confirm`
   - `reject <plan_id> --confirm`
   - `execute <plan_id> --confirm`
+
+### MCP integration (optional)
+Optional, separate MCP stdio server that exposes **read-only workspace resources** only (no MCP tools).
+Approval and execution remain via the gateway endpoints and wrappers.
+
+- Script: `integrations/mcp/mini_jarvis_workspace_resources.py`
+- Resources (examples):
+  - `mini-jarvis://workspaces/active`
+  - `mini-jarvis://workspaces/active/{task_id}/compact`
+  - `mini-jarvis://workspaces/active/{task_id}/files/PLAN.json`
 
 ---
 
