@@ -305,6 +305,10 @@ Proposal, approval, and execution are intentionally separate steps.
 - `docs/CURRENT_STATE.md`
 - `docs/ARCHITECTURE_INVARIANTS.md`
 
+## Project memory wiki
+
+- `docs/wiki/README.md`
+
 ## Extending tools and routing
 
 - **New built-in tool**: implement in `tools.py`, register in `_TOOL_FUNCS`, seed or lifecycle through `registry`, extend `_INTENT_MAP` as needed, keep httpx calls behind `http_allowlist` checks.
