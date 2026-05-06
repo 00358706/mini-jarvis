@@ -60,6 +60,22 @@ if ($Resp.status -ne "pending_approval") {
 }
 
 Write-Host ""
+Write-Host "--- pending (read-only index) should include our plan id + next steps ---"
+$Pending = python $ReviewWrapper pending | Out-String
+Write-Host $Pending
+Assert-Contains $Pending $PlanId "Expected pending index to include created plan_id."
+Assert-Contains $Pending "Next steps (explicit):" "Expected next steps section in pending index."
+Assert-Contains $Pending "mini_jarvis_plan_review.py show" "Expected show command in pending index."
+Assert-Contains $Pending "mini_jarvis_plan_review.py approve" "Expected approve command in pending index."
+Assert-Contains $Pending "mini_jarvis_plan_review.py reject" "Expected reject command in pending index."
+Assert-Contains $Pending "mini_jarvis_plan_review.py execute" "Expected execute command in pending index."
+
+Write-Host ""
+Write-Host "--- pending is read-only (execution log count should still be 0) ---"
+$CompactAfterPending = Invoke-RestMethod -Uri "$BaseUrl/workspaces/active/$PlanId/compact" -Method Get -Headers $Headers
+Assert-True ($CompactAfterPending.execution.log_count -eq 0) "Expected execution.log_count==0 after pending index (must be read-only)."
+
+Write-Host ""
 Write-Host "--- show <plan_id> ---"
 $Show1 = python $ReviewWrapper show $PlanId | Out-String
 Write-Host $Show1

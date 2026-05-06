@@ -326,6 +326,7 @@ Proposal, approval, and execution are intentionally separate steps.
 
 - Wrapper: `integrations/openwebui/mini_jarvis_plan_review.py`
 - Commands:
+  - `pending` (list pending plans; read-only index + next-step commands)
   - `show <plan_id>`
   - `approve <plan_id> --confirm`
   - `reject <plan_id> --confirm`

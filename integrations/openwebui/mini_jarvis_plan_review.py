@@ -123,6 +123,69 @@ def _get_workspace_compact_summary(
     return None, None
 
 
+def _list_pending_plan_ids(base_url: str, api_key: str) -> list[str]:
+    code, body = _http_json("GET", f"{base_url}/plans/pending", api_key)
+    if code != 200 or not isinstance(body, dict):
+        return []
+    plans = body.get("plans")
+    if not isinstance(plans, list):
+        return []
+    out: list[str] = []
+    for p in plans:
+        if isinstance(p, str) and p.strip():
+            out.append(p.strip())
+    return out
+
+
+def _print_pending_index(base_url: str, api_key: str, *, limit: int = 50) -> int:
+    plan_ids = _list_pending_plan_ids(base_url, api_key)
+    plan_ids = plan_ids[: max(0, int(limit or 0))]
+
+    sys.stdout.write("mini-jarvis pending plans\n")
+    sys.stdout.write(f"- count: {len(plan_ids)}\n")
+
+    if not plan_ids:
+        sys.stdout.write("\nNo pending plans.\n")
+        return 0
+
+    for pid in plan_ids:
+        state, compact = _get_workspace_compact_summary(base_url, api_key, pid)
+        tool = None
+        args = None
+        approval_status = None
+        exec_block: dict[str, Any] = {}
+        log_count = 0
+        if isinstance(compact, dict):
+            tool, args = _first_step_from_compact(compact)
+            approval_status = compact.get("approval_status") if isinstance(compact.get("approval_status"), str) else None
+            exec_block = compact.get("execution") if isinstance(compact.get("execution"), dict) else {}
+            if isinstance(exec_block.get("log_count"), (int, float)):
+                log_count = int(exec_block.get("log_count"))
+
+        sys.stdout.write("\n")
+        sys.stdout.write(f"plan_id: {pid}\n")
+        if isinstance(state, str):
+            sys.stdout.write(f"- state: {state}\n")
+        if approval_status:
+            sys.stdout.write(f"- approval_status: {approval_status}\n")
+        if tool:
+            sys.stdout.write(f"- tool: {tool}\n")
+        if args is not None:
+            args_json = json.dumps(args, ensure_ascii=True)
+            if not _is_debug():
+                args_json = _cap_text(args_json, max_chars=300)
+            sys.stdout.write(f"- args: {args_json}\n")
+        sys.stdout.write(f"- execution.log_count: {log_count}\n")
+
+        sys.stdout.write("Next steps (explicit):\n")
+        sys.stdout.write(f"- Review:  python integrations/openwebui/mini_jarvis_plan_review.py show {pid}\n")
+        sys.stdout.write(f"- Approve: python integrations/openwebui/mini_jarvis_plan_review.py approve {pid} --confirm\n")
+        sys.stdout.write(f"- Reject:  python integrations/openwebui/mini_jarvis_plan_review.py reject {pid} --confirm\n")
+        sys.stdout.write(f"- Execute: python integrations/openwebui/mini_jarvis_plan_review.py execute {pid} --confirm   (after approval)\n")
+
+    return 0
+
+
 def _print_workspace_summary(plan_id: str, state: str, ws: dict[str, Any]) -> None:
     plan_json = ws.get("plan_json") if isinstance(ws.get("plan_json"), dict) else None
     tool, args = _first_step(plan_json)
@@ -219,9 +282,10 @@ def _require_confirm(confirm: bool, action: str) -> int:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 3:
+    if len(argv) < 2:
         sys.stderr.write(
             "Usage:\n"
+            "  python integrations/openwebui/mini_jarvis_plan_review.py pending\n"
             "  python integrations/openwebui/mini_jarvis_plan_review.py show <plan_id>\n"
             "  python integrations/openwebui/mini_jarvis_plan_review.py approve <plan_id> --confirm\n"
             "  python integrations/openwebui/mini_jarvis_plan_review.py reject <plan_id> --confirm\n"
@@ -235,8 +299,8 @@ def main(argv: list[str]) -> int:
         return 2
 
     cmd = argv[1].strip().lower()
-    plan_id = argv[2].strip()
-    confirm = "--confirm" in argv[3:]
+    plan_id = argv[2].strip() if len(argv) >= 3 else ""
+    confirm = "--confirm" in argv[3:] if len(argv) >= 4 else ("--confirm" in argv[2:])
 
     base_url = _env("MINI_JARVIS_BASE_URL", "http://127.0.0.1:8000")
     api_key = _env("MINI_JARVIS_API_KEY")
@@ -248,7 +312,13 @@ def main(argv: list[str]) -> int:
         return 2
     base_url = base_url.rstrip("/")
 
+    if cmd == "pending":
+        return _print_pending_index(base_url, api_key, limit=50)
+
     if cmd == "show":
+        if not plan_id:
+            sys.stderr.write("plan_id is required for show\n")
+            return 2
         c_state, compact = _get_workspace_compact_summary(base_url, api_key, plan_id)
         if not c_state or not compact:
             sys.stderr.write("Workspace not found for plan_id.\n")
@@ -264,6 +334,9 @@ def main(argv: list[str]) -> int:
         return 0
 
     if cmd == "approve":
+        if not plan_id:
+            sys.stderr.write("plan_id is required for approve\n")
+            return 2
         rc = _require_confirm(confirm, "approve")
         if rc != 0:
             return rc
@@ -294,6 +367,9 @@ def main(argv: list[str]) -> int:
         return 1
 
     if cmd == "reject":
+        if not plan_id:
+            sys.stderr.write("plan_id is required for reject\n")
+            return 2
         rc = _require_confirm(confirm, "reject")
         if rc != 0:
             return rc
@@ -311,6 +387,9 @@ def main(argv: list[str]) -> int:
         return 0 if code == 200 else 1
 
     if cmd == "execute":
+        if not plan_id:
+            sys.stderr.write("plan_id is required for execute\n")
+            return 2
         rc = _require_confirm(confirm, "execute")
         if rc != 0:
             return rc
