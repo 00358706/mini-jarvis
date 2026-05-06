@@ -37,6 +37,9 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `integrations/openwebui/mini_jarvis_plan_propose.py` (proposal-only)
 - `integrations/openwebui/mini_jarvis_plan_review.py` (review + explicit approve/reject/execute with `--confirm`)
 
+## Current local review dashboard (client-only)
+- `integrations/local_dashboard/` — static HTML/JS demo UI that uses gateway endpoints only (no gateway changes).
+
 ## Current test scripts (PowerShell)
 - `scripts/test_agent_tool_policy.ps1`
 - `scripts/test_project_agent_policy.ps1`
@@ -45,6 +48,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `scripts/test_project_readonly_tools.ps1`
 - `scripts/test_workspace_review_endpoints.ps1`
 - `scripts/test_plans_from_message.ps1`
+- `scripts/test_external_ui_flow.ps1`
 - `scripts/test_openwebui_action_wrapper.ps1`
 - `scripts/test_openwebui_plan_review_wrapper.ps1`
 

@@ -14,23 +14,7 @@ Before implementing anything here, read:
 
 ## Current recommended next branch
 
-### `openwebui-compact-workflow-polish`
-
-Improve the Open WebUI wrapper UX so proposal, review, approval, and execution feel like one clean workflow while remaining separate authority steps.
-
-Allowed:
-- Use compact workspace summaries.
-- Add clear next-step commands.
-- Cap result previews.
-- Avoid huge JSON unless DEBUG is set.
-
-Not allowed:
-- Auto-approval.
-- Auto-execution.
-- New tools.
-- Apply-patch.
-- LoopLM.
-- Generated tool execution.
+No single “next branch” is recommended right now. Pick a backlog item explicitly and keep changes small and branch-scoped.
 
 ## Near-term backlog
 

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mini-jarvis — local review dashboard (client only)</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b0f14;
+        --fg: #e6edf3;
+        --muted: #9aa4af;
+        --card: #111827;
+        --border: #233042;
+        --accent: #60a5fa;
+        --danger: #f87171;
+        --ok: #34d399;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans,
+          sans-serif;
+      }
+      header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(17, 24, 39, 0.35);
+        position: sticky;
+        top: 0;
+        backdrop-filter: blur(8px);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 650;
+      }
+      header p {
+        margin: 6px 0 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      main {
+        padding: 18px 20px 40px;
+        max-width: 1100px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .card {
+        border: 1px solid var(--border);
+        background: var(--card);
+        border-radius: 10px;
+        padding: 14px;
+      }
+      .card h2 {
+        margin: 0 0 10px 0;
+        font-size: 14px;
+        font-weight: 650;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      input,
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--border);
+        background: rgba(3, 7, 18, 0.6);
+        color: var(--fg);
+        border-radius: 8px;
+        padding: 10px;
+        font-family: inherit;
+        font-size: 13px;
+        box-sizing: border-box;
+      }
+      textarea {
+        min-height: 70px;
+        resize: vertical;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .btns {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      button {
+        border: 1px solid var(--border);
+        background: rgba(96, 165, 250, 0.14);
+        color: var(--fg);
+        padding: 9px 10px;
+        border-radius: 9px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: rgba(148, 163, 184, 0.12);
+      }
+      button.danger {
+        background: rgba(248, 113, 113, 0.14);
+        border-color: rgba(248, 113, 113, 0.3);
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .note {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      pre {
+        margin: 10px 0 0 0;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: rgba(3, 7, 18, 0.6);
+        overflow: auto;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--muted);
+        margin-left: 8px;
+      }
+      .pill.ok {
+        border-color: rgba(52, 211, 153, 0.35);
+        color: var(--ok);
+      }
+      .pill.bad {
+        border-color: rgba(248, 113, 113, 0.35);
+        color: var(--danger);
+      }
+      footer {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 0 20px 26px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      a {
+        color: var(--accent);
+      }
+      @media (max-width: 980px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>mini-jarvis — local review dashboard <span class="pill">client only</span></h1>
+      <p>
+        Uses gateway endpoints only. Approve and execute are separate explicit clicks. No tool execution happens in the UI.
+      </p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>1) Connection</h2>
+        <div class="row">
+          <div>
+            <label for="baseUrl">Gateway base URL</label>
+            <input id="baseUrl" placeholder="http://127.0.0.1:8000" />
+          </div>
+          <div>
+            <label for="apiKey">API key (X-API-Key)</label>
+            <input id="apiKey" placeholder="(not stored; session only)" type="password" />
+          </div>
+        </div>
+        <div class="btns">
+          <button id="btnHealth" class="secondary">Health</button>
+          <button id="btnPending" class="secondary">List pending plans</button>
+        </div>
+        <div class="note">
+          This dashboard talks to a local proxy at <code>/api</code> on the same origin (served by <code>serve_dashboard.py</code>)
+          so the gateway does not need CORS changes.
+        </div>
+        <pre id="outConn"></pre>
+      </section>
+
+      <section class="card">
+        <h2>2) Propose (from message)</h2>
+        <label for="agent">Agent</label>
+        <select id="agent">
+          <option value="project_maintainer_agent">project_maintainer_agent</option>
+        </select>
+        <div style="height: 8px"></div>
+        <label for="message">Message</label>
+        <textarea id="message" placeholder="list project files"></textarea>
+        <div class="btns">
+          <button id="btnPropose">Propose plan (no approve, no execute)</button>
+        </div>
+        <pre id="outPropose"></pre>
+      </section>
+
+      <section class="card">
+        <h2>3) Review (compact)</h2>
+        <label for="planId">Plan id</label>
+        <input id="planId" placeholder="paste a plan_id or pick from pending list" />
+        <div class="btns">
+          <button id="btnShowActive" class="secondary">Show active compact</button>
+          <button id="btnShowCompleted" class="secondary">Show completed compact</button>
+          <button id="btnShowResult" class="secondary">Show RESULT.md preview</button>
+        </div>
+        <pre id="outReview"></pre>
+      </section>
+
+      <section class="card">
+        <h2>4) Lifecycle (explicit)</h2>
+        <div class="note">
+          Approval and execution are intentionally separate. The UI never combines them and never hides execution state.
+        </div>
+        <div class="btns">
+          <button id="btnApprove">Approve (explicit click)</button>
+          <button id="btnExecute">Execute (explicit click; only after approval)</button>
+          <button id="btnReject" class="danger">Reject (explicit click)</button>
+        </div>
+        <pre id="outLifecycle"></pre>
+      </section>
+    </main>
+
+    <footer>
+      Manual test: start gateway, run <code>integrations/local_dashboard/serve_dashboard.py</code>, open this page, propose a plan, review compact,
+      then approve and execute via separate clicks. See also <code>scripts/test_external_ui_flow.ps1</code> for a non-UI external-client smoke test.
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+
