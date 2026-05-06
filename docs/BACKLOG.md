@@ -64,6 +64,53 @@ Rules:
 - Require explicit confirmation for any mutation.
 - Keep audit trail.
 
+### Action assurance / structured evidence later
+
+Inspired by the principle: model output is not authority.
+
+Goal:
+Improve Mini-Jarvis evidence records so each approved execution can clearly answer:
+- Who or what proposed the action?
+- On whose behalf was it proposed?
+- What authority scope applied?
+- Was the action allowed at execution time?
+- Who approved it?
+- What actually executed?
+- What evidence proves the result?
+
+Possible future evidence fields:
+- `action_id` / `plan_id`
+- `agent_id`
+- `source_ui`
+- `principal_id` or `local_operator`
+- `proposed_tool`
+- `proposed_args_summary`
+- `authority_scope`
+- `risk_level`
+- `policy_decision`
+- `approval_reference`
+- `execution_status`
+- `workspace_path`
+- `audit_event_refs`
+- `input_sources`
+- `untrusted_input_present`
+
+Rules:
+- Model output remains proposal, not authority.
+- Workspace files remain readable evidence, not authority.
+- Gateway remains the authority.
+- Policy, registry, approval state, and sandbox execution remain the enforcement path.
+- Do not add auto-approval.
+- Do not add auto-execution.
+- Do not combine approve+execute.
+- Do not add generated tool execution.
+- Do not add apply-patch as part of this work.
+
+Safe first branch:
+- Add or document a structured evidence schema only.
+- Prefer docs/schema proposal before runtime changes.
+- Do not change execution behavior in the first pass.
+
 ### Policy/risk model later
 
 Current policy is still simple.
