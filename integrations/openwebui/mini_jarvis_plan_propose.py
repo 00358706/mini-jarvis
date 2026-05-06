@@ -116,9 +116,8 @@ def main(argv: list[str]) -> int:
     tool = None
     tool_args = None
     if status == "pending_approval" and isinstance(plan_id, str):
-        ws = _http_json("GET", f"{base_url}/workspaces/active/{plan_id}", api_key)
-        plan_json = ws.get("plan_json") if isinstance(ws, dict) else None
-        tool, tool_args = _first_step(plan_json if isinstance(plan_json, dict) else None)
+        compact = _http_json("GET", f"{base_url}/workspaces/active/{plan_id}/compact", api_key)
+        tool, tool_args = _first_step(compact if isinstance(compact, dict) else None)
 
     lines: list[str] = []
     lines.append("mini-jarvis plan proposal")
