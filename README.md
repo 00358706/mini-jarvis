@@ -373,6 +373,7 @@ Approval and execution remain via the gateway endpoints and wrappers.
 
 ## Project checkpoint docs
 
+- `docs/AGENT_HANDOFF.md`
 - `docs/CURRENT_STATE.md`
 - `docs/ARCHITECTURE_INVARIANTS.md`
 
