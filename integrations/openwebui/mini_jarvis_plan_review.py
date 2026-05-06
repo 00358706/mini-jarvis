@@ -63,10 +63,36 @@ def _http_json(
         return exc.code, parsed
 
 
+def _is_debug() -> bool:
+    v = os.getenv("DEBUG") or ""
+    return v.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _cap_text(text: str, *, max_chars: int) -> str:
+    t = text.strip()
+    if len(t) <= max_chars:
+        return t
+    return t[:max_chars] + "\n…"
+
+
 def _first_step(plan_json: dict[str, Any] | None) -> tuple[str | None, dict[str, Any] | None]:
     if not isinstance(plan_json, dict):
         return None, None
     steps = plan_json.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return None, None
+    step0 = steps[0]
+    if not isinstance(step0, dict):
+        return None, None
+    tool = step0.get("tool")
+    args = step0.get("args")
+    return (tool if isinstance(tool, str) else None, args if isinstance(args, dict) else None)
+
+
+def _first_step_from_compact(compact: dict[str, Any] | None) -> tuple[str | None, dict[str, Any] | None]:
+    if not isinstance(compact, dict):
+        return None, None
+    steps = compact.get("steps")
     if not isinstance(steps, list) or not steps:
         return None, None
     step0 = steps[0]
@@ -143,7 +169,7 @@ def _print_workspace_summary(plan_id: str, state: str, ws: dict[str, Any]) -> No
 def _print_compact_workspace_summary(
     plan_id: str, state: str, compact: dict[str, Any]
 ) -> None:
-    tool, args = _first_step(compact)
+    tool, args = _first_step_from_compact(compact)
 
     policy = compact.get("policy") if isinstance(compact.get("policy"), dict) else {}
     policy_allowed = policy.get("allowed") if isinstance(policy.get("allowed"), bool) else None
@@ -153,6 +179,7 @@ def _print_compact_workspace_summary(
     approval_status = compact.get("approval_status")
     exec_block = compact.get("execution") if isinstance(compact.get("execution"), dict) else {}
     log_count = exec_block.get("log_count") if isinstance(exec_block.get("log_count"), (int, float)) else 0
+    exec_status = exec_block.get("status") if isinstance(exec_block.get("status"), str) else None
     artifacts_block = compact.get("artifacts") if isinstance(compact.get("artifacts"), dict) else {}
     patch_present = artifacts_block.get("patch_proposal_present")
 
@@ -163,7 +190,10 @@ def _print_compact_workspace_summary(
     if tool:
         lines.append(f"- tool: {tool}")
     if args is not None:
-        lines.append(f"- args: {json.dumps(args, ensure_ascii=True)}")
+        args_json = json.dumps(args, ensure_ascii=True)
+        if not _is_debug():
+            args_json = _cap_text(args_json, max_chars=800)
+        lines.append(f"- args: {args_json}")
     if isinstance(policy_allowed, bool):
         lines.append(f"- policy.allowed: {str(policy_allowed).lower()}")
     if reasons_list:
@@ -172,7 +202,9 @@ def _print_compact_workspace_summary(
             lines.append(f"  - {r}")
     if isinstance(approval_status, str):
         lines.append(f"- approval_status: {approval_status}")
-    lines.append(f"- execution_log_count: {int(log_count)}")
+    if exec_status:
+        lines.append(f"- execution.status: {exec_status}")
+    lines.append(f"- execution.log_count: {int(log_count)}")
     lines.append(f"- patch_proposal_present: {str(bool(patch_present)).lower()}")
 
     sys.stdout.write("\n".join(lines) + "\n")
@@ -181,7 +213,8 @@ def _print_compact_workspace_summary(
 def _require_confirm(confirm: bool, action: str) -> int:
     if confirm:
         return 0
-    sys.stdout.write(f"Refusing to {action} without --confirm\n")
+    sys.stdout.write(f"Refusing to {action} without --confirm.\n")
+    sys.stdout.write("This wrapper does not auto-approve or auto-execute.\n")
     return 2
 
 
@@ -193,6 +226,11 @@ def main(argv: list[str]) -> int:
             "  python integrations/openwebui/mini_jarvis_plan_review.py approve <plan_id> --confirm\n"
             "  python integrations/openwebui/mini_jarvis_plan_review.py reject <plan_id> --confirm\n"
             "  python integrations/openwebui/mini_jarvis_plan_review.py execute <plan_id> --confirm\n"
+            "\n"
+            "Notes:\n"
+            "  - approve does NOT execute tools\n"
+            "  - execute does NOT approve plans\n"
+            "  - set DEBUG=1 for raw JSON\n"
         )
         return 2
 
@@ -215,15 +253,14 @@ def main(argv: list[str]) -> int:
         if not c_state or not compact:
             sys.stderr.write("Workspace not found for plan_id.\n")
             return 1
+        _print_compact_workspace_summary(plan_id, c_state, compact)
         if c_state == "completed":
-            # Completed view still includes RESULT.md preview for human readability.
             state, ws = _get_workspace_summary(base_url, api_key, plan_id)
-            if not state or not ws:
-                sys.stderr.write("Completed workspace not found for plan_id.\n")
-                return 1
-            _print_workspace_summary(plan_id, state, ws)
-        else:
-            _print_compact_workspace_summary(plan_id, c_state, compact)
+            if state == "completed" and isinstance(ws, dict):
+                result_text = ws.get("result_text")
+                if isinstance(result_text, str) and result_text.strip():
+                    sys.stdout.write("\nRESULT.md (preview):\n")
+                    sys.stdout.write(_cap_text(result_text, max_chars=1200) + "\n")
         return 0
 
     if cmd == "approve":
@@ -238,13 +275,23 @@ def main(argv: list[str]) -> int:
         code, compact = _http_json(
             "GET", f"{base_url}/workspaces/active/{plan_id}/compact", api_key
         )
-        tool, args = _first_step(compact if isinstance(compact, dict) else None)
+        tool, args = _first_step_from_compact(compact if isinstance(compact, dict) else None)
         if tool:
             sys.stdout.write(f"Approving plan {plan_id} (tool={tool}, args={json.dumps(args or {}, ensure_ascii=True)})\n")
         code, body = _http_json("POST", f"{base_url}/plans/{plan_id}/approve", api_key)
         sys.stdout.write(f"approve http_status: {code}\n")
-        sys.stdout.write(json.dumps(body, ensure_ascii=True) + "\n")
-        return 0 if code == 200 else 1
+        if code == 200:
+            sys.stdout.write("Approved. No tools executed.\n")
+            sys.stdout.write("\nNext step (explicit):\n")
+            sys.stdout.write(f"- Execute: python integrations/openwebui/mini_jarvis_plan_review.py execute {plan_id} --confirm\n")
+            if _is_debug():
+                sys.stdout.write("\nDEBUG raw response:\n")
+                sys.stdout.write(json.dumps(body, ensure_ascii=True) + "\n")
+            return 0
+        if _is_debug():
+            sys.stdout.write("\nDEBUG raw response:\n")
+            sys.stdout.write(json.dumps(body, ensure_ascii=True) + "\n")
+        return 1
 
     if cmd == "reject":
         rc = _require_confirm(confirm, "reject")
@@ -257,7 +304,10 @@ def main(argv: list[str]) -> int:
             payload={"reason": "rejected via openwebui wrapper"},
         )
         sys.stdout.write(f"reject http_status: {code}\n")
-        sys.stdout.write(json.dumps(body, ensure_ascii=True) + "\n")
+        if code == 200:
+            sys.stdout.write("Rejected. No tools executed.\n")
+        if _is_debug():
+            sys.stdout.write(json.dumps(body, ensure_ascii=True) + "\n")
         return 0 if code == 200 else 1
 
     if cmd == "execute":
@@ -266,14 +316,21 @@ def main(argv: list[str]) -> int:
             return rc
         code, body = _http_json("POST", f"{base_url}/plans/{plan_id}/execute", api_key)
         sys.stdout.write(f"execute http_status: {code}\n")
-        sys.stdout.write(json.dumps(body, ensure_ascii=True) + "\n")
+        if _is_debug():
+            sys.stdout.write(json.dumps(body, ensure_ascii=True) + "\n")
         if code != 200:
             return 1
-        # If execution succeeded, try to show completed summary.
-        state, ws = _get_workspace_summary(base_url, api_key, plan_id)
-        if state == "completed" and ws:
+        # If execution succeeded, show completed compact summary + capped result preview.
+        c_state, compact = _get_workspace_compact_summary(base_url, api_key, plan_id)
+        if c_state and compact:
             sys.stdout.write("\n")
-            _print_workspace_summary(plan_id, state, ws)
+            _print_compact_workspace_summary(plan_id, c_state, compact)
+        state, ws = _get_workspace_summary(base_url, api_key, plan_id)
+        if state == "completed" and isinstance(ws, dict):
+            result_text = ws.get("result_text")
+            if isinstance(result_text, str) and result_text.strip():
+                sys.stdout.write("\nRESULT.md (preview):\n")
+                sys.stdout.write(_cap_text(result_text, max_chars=1200) + "\n")
         return 0
 
     sys.stderr.write(f"Unknown command: {cmd}\n")

@@ -39,6 +39,13 @@ function Assert-ExitNonZero {
     }
 }
 
+function Assert-True {
+    param([bool]$Condition, [string]$Message)
+    if (-not $Condition) {
+        throw $Message
+    }
+}
+
 Write-Host "--- Create plan via POST /plans/from-message ---"
 $PlanId = "manual_review_wrapper_" + (Get-Date -Format "yyyyMMdd_HHmmss")
 $Body = @{
@@ -58,6 +65,15 @@ $Show1 = python $ReviewWrapper show $PlanId | Out-String
 Write-Host $Show1
 Assert-Contains $Show1 "state: active" "Expected active state in show output."
 Assert-Contains $Show1 "tool: list_project_files" "Expected list_project_files in show output."
+Assert-Contains $Show1 "approval_status: pending_approval" "Expected approval_status in show output."
+Assert-Contains $Show1 "execution.log_count: 0" "Expected execution.log_count in show output."
+
+Write-Host ""
+Write-Host "--- execute with --confirm before approval should fail (no approve+execute shortcut) ---"
+$ExecBefore = python $ReviewWrapper execute $PlanId --confirm | Out-String
+$ExitBefore = $LASTEXITCODE
+Write-Host $ExecBefore
+Assert-ExitNonZero $ExitBefore "Execute before approval should be nonzero."
 
 Write-Host ""
 Write-Host "--- approve without --confirm should refuse ---"
@@ -74,7 +90,15 @@ $Exit2 = $LASTEXITCODE
 Write-Host $ApproveYes
 if ($Exit2 -ne 0) { throw "Approve with --confirm failed." }
 Assert-Contains $ApproveYes "approve http_status: 200" "Expected approve http_status: 200 in approve output."
-Assert-Matches $ApproveYes '"status"\s*:\s*"approved"' "Expected status=approved JSON in approve output."
+Assert-Contains $ApproveYes "Approved. No tools executed." "Expected explicit no-execution note after approve."
+Assert-Contains $ApproveYes "Next step (explicit):" "Expected next-step text after approve."
+Assert-Contains $ApproveYes "mini_jarvis_plan_review.py execute" "Expected execute command after approve."
+
+Write-Host ""
+Write-Host "--- after approve: workspace should still show no execution ---"
+$CompactAfterApprove = Invoke-RestMethod -Uri "$BaseUrl/workspaces/active/$PlanId/compact" -Method Get -Headers $Headers
+Assert-True ($CompactAfterApprove.execution.log_count -eq 0) "Expected execution.log_count==0 after approve (approve must not execute)."
+Assert-True ($CompactAfterApprove.execution.has_result -eq $false) "Expected execution.has_result==false after approve (approve must not execute)."
 
 Write-Host ""
 Write-Host "--- execute without --confirm should refuse ---"
@@ -92,13 +116,15 @@ Write-Host $ExecYes
 if ($Exit4 -ne 0) { throw "Execute with --confirm failed." }
 Assert-Contains $ExecYes "execute http_status: 200" "Expected execute http_status: 200 in execute output."
 Assert-Contains $ExecYes "executed_success" "Expected executed_success in execute output."
+Assert-Contains $ExecYes "state: completed" "Expected completed compact state after execution."
+Assert-Contains $ExecYes "RESULT.md (preview):" "Expected RESULT.md preview label after execution."
 
 Write-Host ""
 Write-Host "--- show <plan_id> (completed) ---"
 $Show2 = python $ReviewWrapper show $PlanId | Out-String
 Write-Host $Show2
 Assert-Contains $Show2 "state: completed" "Expected completed state after execution."
-Assert-Contains $Show2 "RESULT.md:" "Expected result text in completed show output."
+Assert-Contains $Show2 "RESULT.md (preview):" "Expected result preview label in completed show output."
 
 Write-Host ""
 Write-Host "Done."

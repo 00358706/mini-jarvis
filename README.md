@@ -305,6 +305,20 @@ Approval and execution remain separate gateway steps (`/plans/{plan_id}/approve`
   - `MINI_JARVIS_BASE_URL` (default `http://127.0.0.1:8000`)
   - `MINI_JARVIS_API_KEY` (required; same value as gateway `GATEWAY_API_KEY`)
   - `MINI_JARVIS_AGENT` (default `project_maintainer_agent`)
+  - `DEBUG=1` (optional; prints raw JSON responses)
+
+Safe workflow (no shortcuts):
+1. **Propose** (creates a pending plan; does not approve; does not execute):
+
+```powershell
+.\.venv\Scripts\python.exe integrations\openwebui\mini_jarvis_plan_propose.py "list project files"
+```
+
+2. **Review** the compact “approval-card” summary (read-only):
+
+```powershell
+.\.venv\Scripts\python.exe integrations\openwebui\mini_jarvis_plan_review.py show <plan_id>
+```
 
 ### Open WebUI integration (review/approve/execute wrapper)
 Separate wrapper for reviewing an existing plan and explicitly calling approval/execution endpoints.
@@ -316,6 +330,22 @@ Proposal, approval, and execution are intentionally separate steps.
   - `approve <plan_id> --confirm`
   - `reject <plan_id> --confirm`
   - `execute <plan_id> --confirm`
+
+3. **Approve** (requires `--confirm`; does not execute tools):
+
+```powershell
+.\.venv\Scripts\python.exe integrations\openwebui\mini_jarvis_plan_review.py approve <plan_id> --confirm
+```
+
+4. **Execute** (requires `--confirm`; only works after approval; does not auto-approve):
+
+```powershell
+.\.venv\Scripts\python.exe integrations\openwebui\mini_jarvis_plan_review.py execute <plan_id> --confirm
+```
+
+Notes:
+- Workspace summaries are **review aids only** (read-only mirrors). Authority remains with gateway code, policy, registry, approval state, and the sandbox execution boundary.
+- Wrapper output is **compact by default**; set `DEBUG=1` if you need raw/verbose JSON.
 
 ### MCP integration (optional)
 Optional, separate MCP stdio server that exposes **read-only workspace resources** only (no MCP tools).

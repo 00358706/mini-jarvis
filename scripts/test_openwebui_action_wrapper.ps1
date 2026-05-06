@@ -27,13 +27,16 @@ Write-Host "--- Case 1: list project files ---"
 $Out1 = python $Wrapper "list project files" | Out-String
 Write-Host $Out1
 Assert-Contains $Out1 "pending_approval" "Expected pending_approval in wrapper output."
-Assert-Contains $Out1 "list_project_files" "Expected list_project_files in wrapper output."
+Assert-Contains $Out1 "proposed_tool: list_project_files" "Expected proposed_tool in wrapper output."
 Assert-Contains $Out1 "No tools have been executed." "Expected no-execution note in wrapper output."
+Assert-Contains $Out1 "Next steps (explicit):" "Expected next steps section in wrapper output."
+Assert-Contains $Out1 "mini_jarvis_plan_review.py show" "Expected review command in wrapper output."
+Assert-Contains $Out1 "mini_jarvis_plan_review.py approve" "Expected approve command in wrapper output."
 
 Write-Host "--- Case 2: search repo for PATCH_PROPOSAL.md ---"
 $Out2 = python $Wrapper "search repo for PATCH_PROPOSAL.md" | Out-String
 Write-Host $Out2
-Assert-Contains $Out2 "search_repo" "Expected search_repo in wrapper output."
+Assert-Contains $Out2 "proposed_tool: search_repo" "Expected search_repo in wrapper output."
 Assert-Contains $Out2 "PATCH_PROPOSAL.md" "Expected PATCH_PROPOSAL.md in wrapper output."
 
 Write-Host "--- Case 3: unsafe message (radarr_search) ---"
