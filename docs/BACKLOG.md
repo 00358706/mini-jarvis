@@ -52,6 +52,10 @@ Rules:
 
 Inspired by the principle: model output is not authority.
 
+Design checkpoint:
+- See `docs/ACTION_EVIDENCE_SCHEMA.md` for the docs-only proposed evidence schema.
+- The schema is not implemented in runtime code.
+
 Goal:
 Improve Mini-Jarvis evidence records so each approved execution can clearly answer:
 - Who or what proposed the action?
@@ -65,7 +69,7 @@ Improve Mini-Jarvis evidence records so each approved execution can clearly answ
 Possible future evidence fields:
 - `action_id` / `plan_id`
 - `agent_id`
-- `source_ui`
+- `source_client`
 - `principal_id` or `local_operator`
 - `proposed_tool`
 - `proposed_args_summary`
@@ -73,7 +77,7 @@ Possible future evidence fields:
 - `risk_level`
 - `policy_decision`
 - `approval_reference`
-- `execution_status`
+- `execution_state`
 - `workspace_path`
 - `audit_event_refs`
 - `input_sources`
@@ -91,7 +95,7 @@ Rules:
 - Do not add apply-patch as part of this work.
 
 Safe first branch:
-- Add or document a structured evidence schema only.
+- `structured-action-evidence-schema` adds the docs-only schema proposal.
 - Prefer docs/schema proposal before runtime changes.
 - Do not change execution behavior in the first pass.
 
