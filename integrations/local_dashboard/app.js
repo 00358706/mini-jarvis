@@ -16,14 +16,21 @@ function pretty(obj) {
   return JSON.stringify(obj, null, 2);
 }
 
+let apiKeyMemory = "";
+
 function conn() {
   const baseUrl = $("baseUrl").value.trim() || "http://127.0.0.1:8000";
-  const apiKey = $("apiKey").value;
+  const apiKey = apiKeyMemory || "";
   return { baseUrl, apiKey };
 }
 
 async function apiFetch(method, path, body) {
   const { baseUrl, apiKey } = conn();
+  if (!apiKey && path !== "/health") {
+    const err = new Error("Missing API key");
+    err.response = { error: "missing_api_key", message: "Set API key (memory only) before calling authenticated endpoints." };
+    throw err;
+  }
   const resp = await fetch(`/api${path}`, {
     method,
     headers: {
@@ -41,7 +48,7 @@ async function apiFetch(method, path, body) {
     json = { raw: text };
   }
   if (!resp.ok) {
-    const err = new Error(`HTTP ${resp.status}`);
+    const err = new Error(`HTTP ${resp.status} ${resp.statusText || ""}`.trim());
     err.response = json;
     throw err;
   }
@@ -49,13 +56,19 @@ async function apiFetch(method, path, body) {
 }
 
 function setOut(id, value) {
-  $(id).textContent = value;
+  $(id).textContent = capText(value, 6000);
 }
 
-function setStatusPill(ok, outId, prefix) {
-  const el = $(outId);
-  const title = ok ? "OK" : "ERROR";
-  el.textContent = `${prefix}${title}\n\n${el.textContent}`;
+function formatError(e) {
+  const details = e?.response ?? {};
+  const msg = e?.message ? e.message : "Unknown error";
+  const hint =
+    details?.error === "proxy_forbidden"
+      ? "Hint: the local proxy blocks this path/method by design."
+      : details?.error === "Invalid or missing X-API-Key header."
+        ? "Hint: check API key (gateway rejects invalid keys)."
+        : "";
+  return `${msg}\n${hint ? `\n${hint}\n` : "\n"}${pretty(details)}`;
 }
 
 async function onHealth() {
@@ -64,7 +77,7 @@ async function onHealth() {
     const h = await apiFetch("GET", "/health");
     setOut("outConn", pretty(h));
   } catch (e) {
-    setOut("outConn", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outConn", formatError(e));
   }
 }
 
@@ -78,7 +91,7 @@ async function onPending() {
       $("planId").value = plans[0];
     }
   } catch (e) {
-    setOut("outConn", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outConn", formatError(e));
   }
 }
 
@@ -92,10 +105,10 @@ async function onPropose() {
       plan_id: planId,
     };
     const proposal = await apiFetch("POST", "/plans/from-message", body);
-    setOut("outPropose", pretty(proposal));
+    setOut("outPropose", capText(pretty(proposal), 4000));
     if (proposal?.plan_id) $("planId").value = proposal.plan_id;
   } catch (e) {
-    setOut("outPropose", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outPropose", formatError(e));
   }
 }
 
@@ -108,9 +121,9 @@ async function onShowCompact(state) {
   }
   try {
     const compact = await apiFetch("GET", `/workspaces/${state}/${encodeURIComponent(planId)}/compact`);
-    setOut("outReview", pretty(compact));
+    setOut("outReview", capText(pretty(compact), 5000));
   } catch (e) {
-    setOut("outReview", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outReview", formatError(e));
   }
 }
 
@@ -132,7 +145,7 @@ async function onShowResultPreview() {
       `RESULT.md (preview, capped)\n\n${content}\n\n(meta)\n${pretty({ exists: fileObj?.exists })}`,
     );
   } catch (e) {
-    setOut("outReview", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outReview", formatError(e));
   }
 }
 
@@ -143,15 +156,20 @@ async function onApprove() {
     setOut("outLifecycle", "plan_id is required");
     return;
   }
-  if (!window.confirm(`Approve plan ${planId}?\n\nThis does NOT execute tools.`)) return;
+  if (
+    !window.confirm(
+      `Approve plan ${planId}?\n\nThis only marks the plan as approved.\nIt does NOT execute tools.\n\nYou must click Execute separately.`,
+    )
+  )
+    return;
   try {
     const resp = await apiFetch("POST", `/plans/${encodeURIComponent(planId)}/approve`);
     setOut(
       "outLifecycle",
-      `Approved.\n\nNext step (separate explicit click): Execute.\n\n${pretty(resp)}`,
+      `Approved.\n\nNext step (separate explicit click): Execute.\n\n${capText(pretty(resp), 3000)}`,
     );
   } catch (e) {
-    setOut("outLifecycle", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outLifecycle", formatError(e));
   }
 }
 
@@ -164,15 +182,15 @@ async function onExecute() {
   }
   if (
     !window.confirm(
-      `Execute plan ${planId}?\n\nThis is a separate explicit action and only works after approval.`,
+      `Execute plan ${planId}?\n\nThis runs the approved plan through the gateway sandbox.\nIt is a separate explicit action and only works after approval.\n\nThis does NOT auto-approve.`,
     )
   )
     return;
   try {
     const resp = await apiFetch("POST", `/plans/${encodeURIComponent(planId)}/execute`);
-    setOut("outLifecycle", `Executed.\n\n${pretty(resp)}`);
+    setOut("outLifecycle", `Executed.\n\n${capText(pretty(resp), 5000)}`);
   } catch (e) {
-    setOut("outLifecycle", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outLifecycle", formatError(e));
   }
 }
 
@@ -183,21 +201,38 @@ async function onReject() {
     setOut("outLifecycle", "plan_id is required");
     return;
   }
-  if (!window.confirm(`Reject plan ${planId}?\n\nThis does NOT execute tools.`)) return;
+  if (
+    !window.confirm(
+      `Reject plan ${planId}?\n\nThis only rejects the pending plan.\nIt does NOT execute tools.`,
+    )
+  )
+    return;
   try {
     const resp = await apiFetch("POST", `/plans/${encodeURIComponent(planId)}/reject`, {
       reason: "rejected via local_dashboard (client)",
     });
-    setOut("outLifecycle", `Rejected.\n\n${pretty(resp)}`);
+    setOut("outLifecycle", `Rejected.\n\n${capText(pretty(resp), 3000)}`);
   } catch (e) {
-    setOut("outLifecycle", `${e.message}\n\n${pretty(e.response ?? {})}`);
+    setOut("outLifecycle", formatError(e));
   }
+}
+
+function onSetKey() {
+  const v = $("apiKey").value;
+  apiKeyMemory = (v ?? "").toString();
+  $("apiKey").value = "";
+  if (!apiKeyMemory) {
+    setOut("outConn", "API key cleared (memory).");
+    return;
+  }
+  setOut("outConn", "API key set in memory. (Input field cleared; key is not stored.)");
 }
 
 function init() {
   $("baseUrl").value = "http://127.0.0.1:8000";
   $("message").value = "list project files";
 
+  $("btnSetKey").addEventListener("click", onSetKey);
   $("btnHealth").addEventListener("click", onHealth);
   $("btnPending").addEventListener("click", onPending);
   $("btnPropose").addEventListener("click", onPropose);

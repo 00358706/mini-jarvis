@@ -52,6 +52,3 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `scripts/test_openwebui_action_wrapper.ps1`
 - `scripts/test_openwebui_plan_review_wrapper.ps1`
 
-## Recommended next branch
-- `approval-review-ux`
-

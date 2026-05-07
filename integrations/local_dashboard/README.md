@@ -36,6 +36,34 @@ In the UI:
 6. Execute via `POST /plans/<plan_id>/execute` (separate explicit click).
 7. Show completed compact + capped RESULT.md preview.
 
+### Manual safe-flow checklist
+- **Client-only**: the dashboard must only call gateway HTTP endpoints.
+- **Separate explicit actions**:
+  - Propose does **not** approve or execute
+  - Approve does **not** execute
+  - Execute does **not** approve
+- **No stored secrets**:
+  - API key is stored in **memory only** and the input field is cleared after setting it
+  - do not commit/hardcode API keys
+- **Review before approving**:
+  - Always read `/workspaces/active/<plan_id>/compact` before approving
+
+### Proxy-deny tests (expected 403)
+The local proxy has an allowlist and should deny unrelated endpoints.
+
+With the dashboard server running on `http://127.0.0.1:5173`:
+
+```powershell
+$Headers = @{
+  "X-Target-Base-Url" = "http://127.0.0.1:8000"
+  "X-API-Key"         = $env:GATEWAY_API_KEY
+}
+
+# Must be denied (proxy allowlist)
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:5173/api/ingest" -Headers $Headers
+Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:5173/api/tools" -Headers $Headers
+```
+
 ### Endpoint mapping (client contract)
 The dashboard uses only these gateway endpoints:
 - `POST /plans/from-message`

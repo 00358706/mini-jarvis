@@ -20,6 +20,7 @@ import argparse
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import re
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -56,6 +57,29 @@ def _safe_target_base_url(raw: str | None) -> str:
     if not parsed.netloc:
         raise ValueError("Invalid X-Target-Base-Url host")
     return u.rstrip("/")
+
+
+_PLAN_ID_RE = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
+_ALLOWLIST: list[tuple[str, re.Pattern[str]]] = [
+    ("GET", re.compile(r"^/health$")),
+    ("POST", re.compile(r"^/plans/from-message$")),
+    ("GET", re.compile(r"^/plans/pending$")),
+    ("GET", re.compile(rf"^/workspaces/active/{_PLAN_ID_RE}/compact$")),
+    ("GET", re.compile(rf"^/workspaces/completed/{_PLAN_ID_RE}/compact$")),
+    ("GET", re.compile(rf"^/workspaces/completed/{_PLAN_ID_RE}/files/RESULT\.md$")),
+    ("POST", re.compile(rf"^/plans/{_PLAN_ID_RE}/approve$")),
+    ("POST", re.compile(rf"^/plans/{_PLAN_ID_RE}/reject$")),
+    ("POST", re.compile(rf"^/plans/{_PLAN_ID_RE}/execute$")),
+]
+
+
+def _is_allowlisted(method: str, path: str) -> bool:
+    m = (method or "").upper()
+    p = (path or "").split("?", 1)[0]
+    for allowed_method, rx in _ALLOWLIST:
+        if m == allowed_method and rx.match(p):
+            return True
+    return False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -103,6 +127,19 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         upstream_path = self.path[len("/api") :]
+        upstream_path_only = upstream_path.split("?", 1)[0]
+        if not _is_allowlisted(method, upstream_path_only):
+            payload = json.dumps(
+                {
+                    "error": "proxy_forbidden",
+                    "message": "This local dashboard proxy only allows a small, explicit allowlist of gateway endpoints.",
+                    "method": (method or "").upper(),
+                    "path": upstream_path_only,
+                }
+            ).encode("utf-8")
+            self._send(403, payload, content_type="application/json; charset=utf-8")
+            return
+
         upstream_url = urljoin(base_url + "/", upstream_path.lstrip("/"))
 
         length = int(self.headers.get("Content-Length") or 0)
