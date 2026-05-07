@@ -5,6 +5,27 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ReviewWrapper = Join-Path $RepoRoot "integrations\openwebui\mini_jarvis_plan_review.py"
 
+function Select-Python {
+    $candidates = @()
+    if ($env:PYTHON -and $env:PYTHON.Trim()) { $candidates += $env:PYTHON.Trim() }
+
+    $venvPy = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+    if (Test-Path $venvPy) { $candidates += $venvPy }
+    if (Get-Command "python" -ErrorAction SilentlyContinue) { $candidates += "python" }
+
+    foreach ($candidate in $candidates) {
+        try {
+            & $candidate --version *> $null
+            if ($LASTEXITCODE -eq 0) { return $candidate }
+        } catch {
+            # Try the next candidate.
+        }
+    }
+
+    throw "No usable Python interpreter found. Set `$env:PYTHON to .venv\Scripts\python.exe or rebuild .venv."
+}
+
+$Python = Select-Python
 $BaseUrl = if ($env:MINI_JARVIS_BASE_URL) { $env:MINI_JARVIS_BASE_URL } else { "http://127.0.0.1:8000" }
 $ApiKey = if ($env:GATEWAY_API_KEY) { $env:GATEWAY_API_KEY } else { "change-me-before-use" }
 
@@ -47,7 +68,7 @@ function Assert-True {
 }
 
 Write-Host "--- Create plan via POST /plans/from-message ---"
-$PlanId = "manual_review_wrapper_" + (Get-Date -Format "yyyyMMdd_HHmmss")
+$PlanId = "manual_review_wrapper_" + (Get-Date -Format "yyyyMMdd_HHmmssfff") + "_" + ([guid]::NewGuid().ToString("N").Substring(0, 8))
 $Body = @{
     message = "list project files"
     agent   = "project_maintainer_agent"
@@ -58,12 +79,21 @@ $Resp = Invoke-RestMethod -Uri "$BaseUrl/plans/from-message" -Method Post -Heade
 if ($Resp.status -ne "pending_approval") {
     throw "Expected pending_approval from /plans/from-message."
 }
+$PlanId = [string]$Resp.plan_id
+Write-Host ("Created plan_id: " + $PlanId)
 
 Write-Host ""
-Write-Host "--- pending (read-only index) should include our plan id + next steps ---"
-$Pending = python $ReviewWrapper pending | Out-String
+Write-Host "--- /plans/pending should include created plan_id (deterministic) ---"
+$PendingApi = Invoke-RestMethod -Uri "$BaseUrl/plans/pending" -Method Get -Headers $Headers
+$PendingIds = @($PendingApi.plans)
+Write-Host ("pending count: " + $PendingApi.count)
+Write-Host ("pending first 10: " + (($PendingIds | Select-Object -First 10) -join ", "))
+Assert-True ($PendingIds -contains $PlanId) "Expected /plans/pending to include created plan_id."
+
+Write-Host ""
+Write-Host "--- wrapper pending (read-only index) should print next steps (may be truncated) ---"
+$Pending = & $Python $ReviewWrapper pending | Out-String
 Write-Host $Pending
-Assert-Contains $Pending $PlanId "Expected pending index to include created plan_id."
 Assert-Contains $Pending "Next steps (explicit):" "Expected next steps section in pending index."
 Assert-Contains $Pending "mini_jarvis_plan_review.py show" "Expected show command in pending index."
 Assert-Contains $Pending "mini_jarvis_plan_review.py approve" "Expected approve command in pending index."
@@ -77,7 +107,7 @@ Assert-True ($CompactAfterPending.execution.log_count -eq 0) "Expected execution
 
 Write-Host ""
 Write-Host "--- show <plan_id> ---"
-$Show1 = python $ReviewWrapper show $PlanId | Out-String
+$Show1 = & $Python $ReviewWrapper show $PlanId | Out-String
 Write-Host $Show1
 Assert-Contains $Show1 "state: active" "Expected active state in show output."
 Assert-Contains $Show1 "tool: list_project_files" "Expected list_project_files in show output."
@@ -86,14 +116,14 @@ Assert-Contains $Show1 "execution.log_count: 0" "Expected execution.log_count in
 
 Write-Host ""
 Write-Host "--- execute with --confirm before approval should fail (no approve+execute shortcut) ---"
-$ExecBefore = python $ReviewWrapper execute $PlanId --confirm | Out-String
+$ExecBefore = & $Python $ReviewWrapper execute $PlanId --confirm | Out-String
 $ExitBefore = $LASTEXITCODE
 Write-Host $ExecBefore
 Assert-ExitNonZero $ExitBefore "Execute before approval should be nonzero."
 
 Write-Host ""
 Write-Host "--- approve without --confirm should refuse ---"
-$ApproveNo = python $ReviewWrapper approve $PlanId | Out-String
+$ApproveNo = & $Python $ReviewWrapper approve $PlanId | Out-String
 $Exit1 = $LASTEXITCODE
 Write-Host $ApproveNo
 Assert-ExitNonZero $Exit1 "Approve without --confirm should be nonzero."
@@ -101,7 +131,7 @@ Assert-Contains $ApproveNo "Refusing to approve without --confirm" "Expected ref
 
 Write-Host ""
 Write-Host "--- approve with --confirm ---"
-$ApproveYes = python $ReviewWrapper approve $PlanId --confirm | Out-String
+$ApproveYes = & $Python $ReviewWrapper approve $PlanId --confirm | Out-String
 $Exit2 = $LASTEXITCODE
 Write-Host $ApproveYes
 if ($Exit2 -ne 0) { throw "Approve with --confirm failed." }
@@ -118,7 +148,7 @@ Assert-True ($CompactAfterApprove.execution.has_result -eq $false) "Expected exe
 
 Write-Host ""
 Write-Host "--- execute without --confirm should refuse ---"
-$ExecNo = python $ReviewWrapper execute $PlanId | Out-String
+$ExecNo = & $Python $ReviewWrapper execute $PlanId | Out-String
 $Exit3 = $LASTEXITCODE
 Write-Host $ExecNo
 Assert-ExitNonZero $Exit3 "Execute without --confirm should be nonzero."
@@ -126,7 +156,7 @@ Assert-Contains $ExecNo "Refusing to execute without --confirm" "Expected refusa
 
 Write-Host ""
 Write-Host "--- execute with --confirm ---"
-$ExecYes = python $ReviewWrapper execute $PlanId --confirm | Out-String
+$ExecYes = & $Python $ReviewWrapper execute $PlanId --confirm | Out-String
 $Exit4 = $LASTEXITCODE
 Write-Host $ExecYes
 if ($Exit4 -ne 0) { throw "Execute with --confirm failed." }
@@ -137,7 +167,7 @@ Assert-Contains $ExecYes "RESULT.md (preview):" "Expected RESULT.md preview labe
 
 Write-Host ""
 Write-Host "--- show <plan_id> (completed) ---"
-$Show2 = python $ReviewWrapper show $PlanId | Out-String
+$Show2 = & $Python $ReviewWrapper show $PlanId | Out-String
 Write-Host $Show2
 Assert-Contains $Show2 "state: completed" "Expected completed state after execution."
 Assert-Contains $Show2 "RESULT.md (preview):" "Expected result preview label in completed show output."
