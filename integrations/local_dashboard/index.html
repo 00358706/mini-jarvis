@@ -174,7 +174,8 @@
     <header>
       <h1>mini-jarvis — local review dashboard <span class="pill">client only</span></h1>
       <p>
-        Uses gateway endpoints only. Approve and execute are separate explicit clicks. No tool execution happens in the UI.
+        Uses gateway endpoints only. Approve and execute are separate explicit clicks. No tool
+        execution happens in the UI.
       </p>
     </header>
 
@@ -197,8 +198,8 @@
           <button id="btnPending" class="secondary">List pending plans</button>
         </div>
         <div class="note">
-          This dashboard talks to a local proxy at <code>/api</code> on the same origin (served by <code>serve_dashboard.py</code>)
-          so the gateway does not need CORS changes.
+          This dashboard talks to a local proxy at <code>/api</code> on the same origin (served by
+          <code>serve_dashboard.py</code>) so the gateway does not need CORS changes.
         </div>
         <pre id="outConn"></pre>
       </section>
@@ -245,8 +246,9 @@
     </main>
 
     <footer>
-      Manual test: start gateway, run <code>integrations/local_dashboard/serve_dashboard.py</code>, open this page, propose a plan, review compact,
-      then approve and execute via separate clicks. See also <code>scripts/test_external_ui_flow.ps1</code> for a non-UI external-client smoke test.
+      Manual test: start gateway, run <code>integrations/local_dashboard/serve_dashboard.py</code>,
+      open this page, propose a plan, review compact, then approve and execute via separate clicks.
+      See also <code>scripts/test_external_ui_flow.ps1</code> for a non-UI external-client smoke test.
     </footer>
 
     <script src="./app.js"></script>

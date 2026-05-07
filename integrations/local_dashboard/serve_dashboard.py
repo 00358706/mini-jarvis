@@ -161,7 +161,11 @@ class Handler(BaseHTTPRequestHandler):
         except HTTPError as exc:
             raw = exc.read() if exc.fp else b""
             ct = exc.headers.get("Content-Type") if exc.headers else None
-            self._send(exc.code, raw or b"{}", content_type=ct or "application/json; charset=utf-8")
+            self._send(
+                exc.code,
+                raw or b"{}",
+                content_type=ct or "application/json; charset=utf-8",
+            )
         except URLError as exc:
             payload = json.dumps({"error": f"upstream_error: {exc}"}).encode("utf-8")
             self._send(502, payload, content_type="application/json; charset=utf-8")

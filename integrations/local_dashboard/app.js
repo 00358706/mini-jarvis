@@ -28,9 +28,13 @@ async function apiFetch(method, path, body) {
   const { baseUrl, apiKey } = conn();
   if (!apiKey && path !== "/health") {
     const err = new Error("Missing API key");
-    err.response = { error: "missing_api_key", message: "Set API key (memory only) before calling authenticated endpoints." };
+    err.response = {
+      error: "missing_api_key",
+      message: "Set API key (memory only) before calling authenticated endpoints.",
+    };
     throw err;
   }
+
   const resp = await fetch(`/api${path}`, {
     method,
     headers: {
@@ -47,6 +51,7 @@ async function apiFetch(method, path, body) {
   } catch {
     json = { raw: text };
   }
+
   if (!resp.ok) {
     const err = new Error(`HTTP ${resp.status} ${resp.statusText || ""}`.trim());
     err.response = json;
@@ -120,7 +125,10 @@ async function onShowCompact(state) {
     return;
   }
   try {
-    const compact = await apiFetch("GET", `/workspaces/${state}/${encodeURIComponent(planId)}/compact`);
+    const compact = await apiFetch(
+      "GET",
+      `/workspaces/${state}/${encodeURIComponent(planId)}/compact`,
+    );
     setOut("outReview", capText(pretty(compact), 5000));
   } catch (e) {
     setOut("outReview", formatError(e));
@@ -160,8 +168,10 @@ async function onApprove() {
     !window.confirm(
       `Approve plan ${planId}?\n\nThis only marks the plan as approved.\nIt does NOT execute tools.\n\nYou must click Execute separately.`,
     )
-  )
+  ) {
     return;
+  }
+
   try {
     const resp = await apiFetch("POST", `/plans/${encodeURIComponent(planId)}/approve`);
     setOut(
@@ -184,8 +194,10 @@ async function onExecute() {
     !window.confirm(
       `Execute plan ${planId}?\n\nThis runs the approved plan through the gateway sandbox.\nIt is a separate explicit action and only works after approval.\n\nThis does NOT auto-approve.`,
     )
-  )
+  ) {
     return;
+  }
+
   try {
     const resp = await apiFetch("POST", `/plans/${encodeURIComponent(planId)}/execute`);
     setOut("outLifecycle", `Executed.\n\n${capText(pretty(resp), 5000)}`);
@@ -205,8 +217,10 @@ async function onReject() {
     !window.confirm(
       `Reject plan ${planId}?\n\nThis only rejects the pending plan.\nIt does NOT execute tools.`,
     )
-  )
+  ) {
     return;
+  }
+
   try {
     const resp = await apiFetch("POST", `/plans/${encodeURIComponent(planId)}/reject`, {
       reason: "rejected via local_dashboard (client)",
