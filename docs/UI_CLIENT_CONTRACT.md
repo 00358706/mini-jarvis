@@ -4,6 +4,8 @@ Mini-Jarvis UI clients are clients only. The gateway remains the authority for v
 
 This contract applies to local web UIs, Open WebUI actions, desktop clients, MCP-adjacent viewers, and any future client that helps a human review and operate Mini-Jarvis.
 
+For broader future input/device sources such as shortcuts, hotkeys, bots, files, images, or voice ingress, see `docs/IO_ADAPTER_CONTRACT.md`.
+
 ## Authority Boundary
 
 - UI clients may request proposals, display review state, and call explicit lifecycle endpoints.

@@ -18,6 +18,25 @@ No single “next branch” is recommended right now. Pick a backlog item explic
 
 ## Near-term backlog
 
+### Input and device adapters later
+
+Future trusted-network input sources should follow `docs/IO_ADAPTER_CONTRACT.md` before any implementation work.
+
+Examples:
+- control panel chat bar
+- iPhone Shortcut
+- Windows hotkey
+- Discord bot
+- file/image ingress
+- voice ingress
+
+Rules:
+- Treat these as client/input adapters unless explicitly designed otherwise.
+- Do not let adapters become execution authorities.
+- Do not bypass the plan/policy/approval path.
+- Do not add auto-approval, auto-execution, or approve+execute shortcuts.
+- Keep tool/execution adapters behind registry, policy, approval, and sandbox execution.
+
 ### MCP prompts later
 
 Add reusable MCP prompts, not MCP tools.
