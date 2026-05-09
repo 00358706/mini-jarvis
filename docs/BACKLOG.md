@@ -18,6 +18,22 @@ No single “next branch” is recommended right now. Pick a backlog item explic
 
 ## Near-term backlog
 
+### Routines later
+
+Repeatable Mini-Jarvis tasks should follow `docs/ROUTINE_CONTRACT.md` before any runtime routine or scheduler work.
+
+Examples:
+- on-demand project status routine
+- scheduled read-only maintenance summary
+- input-adapter-triggered review workflow
+
+Rules:
+- Routines are workflow definitions, not agents, tools, or authority.
+- Schedule is a trigger, not authority.
+- Routine definitions must not approve or execute tools by themselves.
+- Keep routine execution behind gateway policy, registry, approval/authorization, and sandbox checks.
+- Missing capabilities may produce tool proposals, but must not install or execute generated tools automatically.
+
 ### Input and device adapters later
 
 Future trusted-network input sources should follow `docs/IO_ADAPTER_CONTRACT.md` before any implementation work.
