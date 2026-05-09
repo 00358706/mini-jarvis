@@ -19,11 +19,13 @@ For broader future input/device sources such as shortcuts, hotkeys, bots, files,
 1. Propose a plan with `/plans/from-message` or `/plans/propose`.
 2. Read the pending index.
 3. Show compact review state.
-4. Approve only after explicit user confirmation.
-5. Execute only after approval and only after explicit user confirmation.
+4. Approve only after explicit user confirmation (approve does **not** execute).
+5. Execute only after approval and only after explicit user confirmation (execute does **not** approve).
 6. Read the completed workspace result.
 
 Approval and execution must remain separate user-visible actions.
+
+For the docs-only execution authorization design checkpoint, see `docs/EXECUTION_AUTHORIZATION.md`.
 
 ## Recommended Endpoints
 
@@ -48,9 +50,19 @@ Approval and execution must remain separate user-visible actions.
 - combine approve+execute
 - hide execution state from the user
 
+## Authorization modes (must be distinguishable)
+
+UI clients must clearly distinguish these user actions (terminology may evolve, but the separation must remain):
+
+1. **Approve for later**: marks a pending plan as approved; **no tool execution**.
+2. **Execute approved plan**: executes a plan already in approved state; **explicit action**.
+3. **Authorize & Run this exact reviewed plan** (docs-only target): a single explicit human action after review that binds to the reviewed plan content (e.g. `plan_hash`) and then executes via the gateway.
+4. **Future scoped routine/capability grants** (future-only): bounded, revocable, expiring grants that must not become a hidden auto-execute channel.
+
 ## UI Should Display
 
 - `plan_id`
+- reviewed plan reference (e.g. `plan_hash` or reviewed-content ref) when available
 - `agent`
 - `proposed_tool`
 - `proposed_args`, capped

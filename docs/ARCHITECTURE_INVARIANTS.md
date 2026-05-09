@@ -26,6 +26,7 @@ These invariants are the “guard rails” for mini-jarvis. Changes should prese
 ## Approval before execution
 - Execution is an explicit, separate step and requires human approval.
 - No auto-approve, no “single-click approve+execute” without explicit human intent.
+- Any future “Authorize & Run” UX must remain an explicit human action after review, and must not bypass policy/registry/approval/sandbox checks (see `docs/EXECUTION_AUTHORIZATION.md`).
 
 ## Sandbox worker is the only side-effect execution path
 - Tool execution goes through `sandbox.run()` → `sandbox_worker.py`.
@@ -34,6 +35,10 @@ These invariants are the “guard rails” for mini-jarvis. Changes should prese
 ## Model output is proposal, not authority
 - LLM outputs must not be treated as executable code or direct tool calls.
 - Generated tools (if added later) must be proposal-only until reviewed and installed via lifecycle.
+
+## Authorization binds to reviewed content (future contract)
+- Any execution authorization must be tied to the **exact reviewed plan content** (e.g. a `plan_hash` or reviewed-content reference) and must be invalidated if the reviewed plan changes.
+- Approval state and workspace files remain evidence; they do not create alternate authority channels.
 
 ## Explicitly deferred (for now)
 - Do not add LoopLM yet.

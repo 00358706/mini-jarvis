@@ -73,6 +73,7 @@ Inspired by the principle: model output is not authority.
 
 Design checkpoint:
 - See `docs/ACTION_EVIDENCE_SCHEMA.md` for the docs-only proposed evidence schema.
+- See `docs/EXECUTION_AUTHORIZATION.md` for the docs-only execution authorization contract.
 - The schema is not implemented in runtime code.
 
 Goal:

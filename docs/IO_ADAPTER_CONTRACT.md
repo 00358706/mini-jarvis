@@ -97,6 +97,11 @@ Example adapters:
 - Sandbox worker remains the only side-effect execution path.
 - Trusted LAN or Tailscale access does not make input, clients, attachments, context adapters, or model output authoritative.
 
+Terminology alignment:
+- “Approve” means “approve for later” (no tool execution).
+- “Execute” means “execute an already approved plan” (explicit action).
+- “Authorize & Run” is a future docs-only mode for an explicit human action after review that binds to the exact reviewed plan content (see `docs/EXECUTION_AUTHORIZATION.md`).
+
 ## Normalized Input Envelope
 
 This is a future target shape only. It does not change current `/ingest` behavior and does not create new runtime requirements.
