@@ -74,6 +74,30 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
+ARTIFACT_KINDS = {
+    "REQUEST.json": "request",
+    "CLASSIFICATION.json": "classification",
+    "CAPABILITY_MATCHES.json": "capability_matches",
+    "REVIEW_SUMMARY.md": "review_summary",
+    "INDEX.json": "review_artifact_index",
+    "ROUTINE_PROPOSAL.md": "routine_proposal",
+    "TOOL_PROPOSAL.md": "tool_proposal",
+    "AGENT_PROPOSAL.md": "agent_proposal",
+    "MODEL_REQUEST.json": "model_request",
+    "MODEL_RESPONSE.json": "model_response",
+    "MODEL_VALIDATION.json": "model_validation",
+    "MODEL_DRAFT.md": "model_draft",
+}
+
+REQUIRED_ARTIFACTS = {
+    "REQUEST.json",
+    "CLASSIFICATION.json",
+    "CAPABILITY_MATCHES.json",
+    "REVIEW_SUMMARY.md",
+    "INDEX.json",
+}
+
+
 def classify_message(message: str, *, model_called: bool = False) -> dict[str, Any]:
     lower = message.lower()
     matched_rules: list[str] = []
@@ -397,6 +421,55 @@ def apply_capability_fixture_lookup(
     return updated
 
 
+def artifact_entry(filename: str) -> dict[str, Any]:
+    suffix = Path(filename).suffix.lower()
+    return {
+        "filename": filename,
+        "kind": ARTIFACT_KINDS.get(filename, "review_artifact"),
+        "format": "json" if suffix == ".json" else "markdown",
+        "required": filename in REQUIRED_ARTIFACTS,
+        "authority": False,
+    }
+
+
+def build_artifact_index(
+    *,
+    request_id: str,
+    created_at: str,
+    classification: dict[str, Any],
+    capability_matches: dict[str, Any],
+    artifacts: list[str],
+    model_enabled: bool,
+    model_validation: dict[str, Any] | None,
+    boundary: dict[str, Any],
+) -> dict[str, Any]:
+    fixture_lookup = capability_matches.get("fixture_lookup")
+    return {
+        "schema_version": "automation-lab-review-artifact-index.v1",
+        "request_id": request_id,
+        "created_at": created_at,
+        "proposal_kind": classification["proposal_kind"],
+        "primary_capability_outcome": capability_matches["primary_outcome"],
+        "local_model": {
+            "enabled": model_enabled,
+            "validation_state": (
+                model_validation.get("validation_state") if model_validation else "not_requested"
+            ),
+        },
+        "fixture_lookup": {
+            "enabled": bool(fixture_lookup),
+            "source": capability_matches.get("source") if fixture_lookup else None,
+            "matched_fixture_id": fixture_lookup.get("matched_fixture_id")
+            if isinstance(fixture_lookup, dict)
+            else None,
+            "advisory_only": True,
+        },
+        "authority": False,
+        "authority_boundary": boundary,
+        "artifacts": [artifact_entry(name) for name in artifacts],
+    }
+
+
 def review_summary_markdown(
     message: str,
     request_id: str,
@@ -613,7 +686,6 @@ def generate(
         "REQUEST.json",
         "CLASSIFICATION.json",
         "CAPABILITY_MATCHES.json",
-        "REVIEW_SUMMARY.md",
     ]
 
     write_json(root / "REQUEST.json", request_payload)
@@ -688,6 +760,7 @@ def generate(
             ]
         )
 
+    artifacts.extend(["REVIEW_SUMMARY.md", "INDEX.json"])
     write_text(
         root / "REVIEW_SUMMARY.md",
         review_summary_markdown(
@@ -698,6 +771,19 @@ def generate(
             artifacts,
             model_enabled=use_local_model,
             model_validation=model_validation,
+        ),
+    )
+    write_json(
+        root / "INDEX.json",
+        build_artifact_index(
+            request_id=rid,
+            created_at=created_at,
+            classification=classification,
+            capability_matches=capability_matches,
+            artifacts=artifacts,
+            model_enabled=use_local_model,
+            model_validation=model_validation,
+            boundary=boundary,
         ),
     )
 

@@ -42,10 +42,13 @@ Fixture lookup only improves `CAPABILITY_MATCHES.json` fields such as `candidate
 
 Each run writes:
 
+- `INDEX.json`
 - `REQUEST.json`
 - `CLASSIFICATION.json`
 - `CAPABILITY_MATCHES.json`
 - `REVIEW_SUMMARY.md`
+
+`INDEX.json` is a per-run review index. It lists every artifact in the run, marks each entry with `authority: false`, records optional local-model and fixture-lookup evidence, and does not approve, authorize, install, register, or execute anything.
 
 Depending on deterministic classification, it may also write one of:
 
