@@ -1,0 +1,112 @@
+{
+  "schema_version": "automation-lab-capability-fixtures.v1",
+  "description": "Static advisory capability hints for the proposal-only automation lab.",
+  "authority_boundary": {
+    "advisory_only": true,
+    "gateway_remains_authority": true,
+    "registry_is_execution_truth": true,
+    "registry_read": false,
+    "registry_modified": false,
+    "tools_executed": false,
+    "sandbox_worker_invoked": false,
+    "generated_tool_execution_allowed": false
+  },
+  "fixtures": [
+    {
+      "fixture_id": "repo_search_reuse",
+      "match_any": [
+        "search repo",
+        "search repository",
+        "find in repo",
+        "find in repository",
+        "grep repo"
+      ],
+      "primary_outcome": "reuse_existing",
+      "capability_ids": [
+        "repo.search.literal"
+      ],
+      "candidate_tools": [
+        {
+          "tool_name": "search_repo",
+          "capability_ids": [
+            "repo.search.literal"
+          ],
+          "registry_status": "fixture_hint_only",
+          "match_notes": "Fixture hint for repository text search; the real registry remains execution truth."
+        }
+      ],
+      "lookup_notes": "Static fixture lookup suggests an existing repository search capability should be reviewed before proposing anything new."
+    },
+    {
+      "fixture_id": "repo_summary_compose",
+      "match_any": [
+        "summarize repo",
+        "summarise repo",
+        "repo summary",
+        "review repo",
+        "repo review",
+        "summarize project",
+        "review project"
+      ],
+      "primary_outcome": "compose_existing",
+      "capability_ids": [
+        "repo.search.literal",
+        "repo.file.inspect"
+      ],
+      "candidate_tools": [
+        {
+          "tool_name": "search_repo",
+          "capability_ids": [
+            "repo.search.literal"
+          ],
+          "registry_status": "fixture_hint_only",
+          "match_notes": "Find relevant repository files or symbols before review."
+        },
+        {
+          "tool_name": "inspect_file",
+          "capability_ids": [
+            "repo.file.inspect"
+          ],
+          "registry_status": "fixture_hint_only",
+          "match_notes": "Read selected files as part of a review or summary."
+        }
+      ],
+      "lookup_notes": "Static fixture lookup suggests composing repository search and file inspection for summary or review requests."
+    },
+    {
+      "fixture_id": "navidrome_release_overlap",
+      "match_any": [
+        "navidrome",
+        "recent release",
+        "recent releases",
+        "new album",
+        "new albums",
+        "new releases"
+      ],
+      "primary_outcome": "extend_existing",
+      "capability_ids": [
+        "navidrome.releases.list_new",
+        "navidrome.albums.list_recent"
+      ],
+      "candidate_tools": [
+        {
+          "tool_name": "navidrome_recent_albums",
+          "capability_ids": [
+            "navidrome.albums.list_recent"
+          ],
+          "registry_status": "fixture_hint_only",
+          "match_notes": "Potential overlap with recent-album lookup; review extension before proposing a parallel tool."
+        },
+        {
+          "tool_name": "navidrome_list_new_releases",
+          "capability_ids": [
+            "navidrome.releases.list_new"
+          ],
+          "registry_status": "fixture_hint_only",
+          "match_notes": "Candidate name for a future reviewed extension or proposal, not an installed-tool assertion."
+        }
+      ],
+      "lookup_notes": "Static fixture lookup flags overlap between Navidrome recent-release and new-album needs; review an extension or duplicate risk before proposing a new tool."
+    }
+  ]
+}

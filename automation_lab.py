@@ -183,24 +183,13 @@ def build_capability_matches(
         candidate_tools = []
         lookup_notes = "Review-only request; no tool proposal is implied."
 
-    considered = []
-    for outcome in ALLOWED_CAPABILITY_OUTCOMES:
-        selected = outcome == primary_outcome
-        considered.append(
-            {
-                "outcome": outcome,
-                "selected": selected,
-                "notes": outcome_note(outcome, primary_outcome, proposal_kind),
-            }
-        )
-
     return {
         "schema_version": "automation-lab-capability-matches.v1",
         "request_id": request_id,
         "source": "deterministic_template_no_registry_read",
         "allowed_outcomes": list(ALLOWED_CAPABILITY_OUTCOMES),
         "primary_outcome": primary_outcome,
-        "outcomes_considered": considered,
+        "outcomes_considered": build_outcomes_considered(primary_outcome, proposal_kind),
         "candidate_tools": candidate_tools,
         "capability_ids": [capability_id_for(message, classification)],
         "lookup_notes": lookup_notes,
@@ -224,6 +213,188 @@ def outcome_note(outcome: str, primary_outcome: str, proposal_kind: str) -> str:
     if outcome == "reject_duplicate":
         return "Considered as a stop condition for overlapping capabilities."
     return "Considered by allowed capability outcome list."
+
+
+def build_outcomes_considered(
+    primary_outcome: str,
+    proposal_kind: str,
+    *,
+    selected_note: str | None = None,
+) -> list[dict[str, Any]]:
+    considered = []
+    for outcome in ALLOWED_CAPABILITY_OUTCOMES:
+        selected = outcome == primary_outcome
+        note = selected_note if selected and selected_note else outcome_note(
+            outcome,
+            primary_outcome,
+            proposal_kind,
+        )
+        considered.append(
+            {
+                "outcome": outcome,
+                "selected": selected,
+                "notes": note,
+            }
+        )
+    return considered
+
+
+def resolve_fixture_path(fixture_path: str | None) -> Path | None:
+    if not fixture_path or not fixture_path.strip():
+        return None
+    path = Path(fixture_path.strip())
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    return path.resolve()
+
+
+def load_capability_fixture_doc(fixture_path: str | None) -> tuple[dict[str, Any] | None, Path | None]:
+    resolved = resolve_fixture_path(fixture_path)
+    if resolved is None:
+        return None, None
+    if not resolved.exists():
+        raise FileNotFoundError(f"Capability fixture file does not exist: {resolved}")
+    payload = json.loads(resolved.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("fixtures"), list):
+        raise ValueError("Capability fixture file must contain a top-level fixtures list.")
+    return payload, resolved
+
+
+def select_capability_fixture(
+    message: str,
+    fixture_doc: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]] | None:
+    lower = message.lower()
+    best: tuple[int, int, dict[str, Any], list[str]] | None = None
+    for index, fixture in enumerate(fixture_doc.get("fixtures", [])):
+        terms = [str(term) for term in fixture.get("match_any", []) if str(term).lower() in lower]
+        if not terms:
+            continue
+        scored = (len(terms), -index, fixture, terms)
+        if best is None or scored[:2] > best[:2]:
+            best = scored
+    if best is None:
+        return None
+    return best[2], best[3]
+
+
+def missing_action_for_outcome(outcome: str, proposal_kind: str) -> str:
+    if outcome in ("reuse_existing", "reject_duplicate"):
+        return "stop"
+    if outcome == "extend_existing":
+        return "propose_tool_update"
+    if outcome == "compose_existing":
+        return "propose_composition_review"
+    if proposal_kind == "routine_proposal":
+        return "propose_routine_update"
+    if proposal_kind == "agent_proposal":
+        return "propose_agent"
+    return "propose_tool"
+
+
+def apply_capability_fixture_lookup(
+    capability_matches: dict[str, Any],
+    message: str,
+    request_id: str,
+    classification: dict[str, Any],
+    fixture_doc: dict[str, Any] | None,
+    fixture_path: Path | None,
+    *,
+    model_called: bool = False,
+) -> dict[str, Any]:
+    if fixture_doc is None or fixture_path is None:
+        return capability_matches
+
+    fixture_match = select_capability_fixture(message, fixture_doc)
+    updated = dict(capability_matches)
+    updated["fixture_lookup"] = {
+        "enabled": True,
+        "fixture_path": str(fixture_path.relative_to(REPO_ROOT)).replace("\\", "/")
+        if fixture_path.is_relative_to(REPO_ROOT)
+        else str(fixture_path),
+        "advisory_only": True,
+        "registry_read": False,
+        "registry_modified": False,
+        "matched_fixture_id": None,
+        "matched_terms": [],
+    }
+
+    if fixture_match is None:
+        primary_outcome = "propose_new"
+        lookup_notes = (
+            "Static fixture lookup found no matching candidate. This is an advisory "
+            "review signal only; registry status was not read or changed."
+        )
+        updated.update(
+            {
+                "request_id": request_id,
+                "source": "static_fixture_lookup_no_match",
+                "primary_outcome": primary_outcome,
+                "outcomes_considered": build_outcomes_considered(
+                    primary_outcome,
+                    classification["proposal_kind"],
+                    selected_note="Selected because the optional fixture lookup found no candidate.",
+                ),
+                "candidate_tools": [],
+                "capability_ids": [capability_id_for(message, classification)],
+                "lookup_notes": lookup_notes,
+                "missing_capability_behavior": {
+                    "action": missing_action_for_outcome(
+                        primary_outcome,
+                        classification["proposal_kind"],
+                    ),
+                    "generated_tool_execution_allowed": False,
+                },
+                "authority_boundary": authority_boundary(model_called=model_called),
+            }
+        )
+        return updated
+
+    fixture, matched_terms = fixture_match
+    primary_outcome = str(fixture["primary_outcome"])
+    if primary_outcome not in ALLOWED_CAPABILITY_OUTCOMES:
+        raise ValueError(f"Fixture outcome is not allowed: {primary_outcome}")
+
+    fixture_id = str(fixture.get("fixture_id", "unnamed_fixture"))
+    lookup_notes = str(
+        fixture.get(
+            "lookup_notes",
+            "Static fixture lookup produced an advisory capability match.",
+        )
+    )
+    updated["fixture_lookup"].update(
+        {
+            "matched_fixture_id": fixture_id,
+            "matched_terms": matched_terms,
+        }
+    )
+    updated.update(
+        {
+            "request_id": request_id,
+            "source": f"static_fixture_lookup:{fixture_id}",
+            "primary_outcome": primary_outcome,
+            "outcomes_considered": build_outcomes_considered(
+                primary_outcome,
+                classification["proposal_kind"],
+                selected_note=f"Selected by optional static fixture `{fixture_id}`.",
+            ),
+            "candidate_tools": fixture.get("candidate_tools", []),
+            "capability_ids": fixture.get(
+                "capability_ids",
+                [capability_id_for(message, classification)],
+            ),
+            "lookup_notes": lookup_notes,
+            "missing_capability_behavior": {
+                "action": missing_action_for_outcome(
+                    primary_outcome,
+                    classification["proposal_kind"],
+                ),
+                "generated_tool_execution_allowed": False,
+            },
+            "authority_boundary": authority_boundary(model_called=model_called),
+        }
+    )
+    return updated
 
 
 def review_summary_markdown(
@@ -391,6 +562,7 @@ def generate(
     model_base_url: str = "http://127.0.0.1:10000/v1",
     model_name: str = "local-model",
     strict_model: bool = False,
+    fixture_path: str | None = None,
 ) -> dict[str, Any]:
     if not message or not message.strip():
         raise ValueError("Message is required.")
@@ -402,11 +574,21 @@ def generate(
     root.mkdir(parents=True)
 
     created_at = utc_now()
+    fixture_doc, resolved_fixture_path = load_capability_fixture_doc(fixture_path)
     classification = classify_message(message, model_called=use_local_model)
     capability_matches = build_capability_matches(
         message,
         rid,
         classification,
+        model_called=use_local_model,
+    )
+    capability_matches = apply_capability_fixture_lookup(
+        capability_matches,
+        message,
+        rid,
+        classification,
+        fixture_doc,
+        resolved_fixture_path,
         model_called=use_local_model,
     )
     boundary = authority_boundary(model_called=use_local_model)
@@ -558,6 +740,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Fail the CLI if optional model drafting fails validation.",
     )
+    parser.add_argument(
+        "--fixture-path",
+        default=None,
+        help="Optional static capability fixture file for advisory lookup.",
+    )
     return parser.parse_args()
 
 
@@ -570,6 +757,7 @@ def main() -> int:
         model_base_url=args.model_base_url,
         model_name=args.model_name,
         strict_model=args.strict_model,
+        fixture_path=args.fixture_path,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

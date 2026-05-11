@@ -12,7 +12,9 @@ param(
 
     [string]$ModelName = "local-model",
 
-    [switch]$StrictModel
+    [switch]$StrictModel,
+
+    [string]$FixturePath
 )
 
 $ErrorActionPreference = "Stop"
@@ -109,6 +111,10 @@ if ($UseLocalModel) {
 
 if ($StrictModel) {
     $ArgsList += "--strict-model"
+}
+
+if ($FixturePath -and $FixturePath.Trim()) {
+    $ArgsList += @("--fixture-path", $FixturePath.Trim())
 }
 
 & $Py @ArgsList
