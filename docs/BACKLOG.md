@@ -36,6 +36,7 @@ Rules:
 
 Suggested follow-up branch:
 - `capability-registry-schema`
+
 ## Near-term backlog
 
 ### Routine contract later

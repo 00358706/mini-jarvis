@@ -1,249 +1,311 @@
-# ROUTINE_CONTRACT
+# ROUTINE_CONTRACT (docs-only)
 
-This document defines a docs-only contract for repeatable Mini-Jarvis routines.
+This document is a **docs-only routine contract** for Mini-Jarvis. It defines what **routines** are, how they relate to triggers and capabilities, and what evidence and lifecycle states mean **before** any routine runtime, scheduler, or new endpoints exist.
 
-It does not add runtime behavior, endpoints, scheduler behavior, policy logic, registry entries, tools, UI behavior, or MCP tools.
+**This document does not change runtime behavior.** It does not add scheduler runtime, generated tool execution, automatic registry installation, apply-patch, `/ingest` changes, endpoints, UI behavior, or MCP tools.
 
-## Purpose
+**Evidence:** this file path in the repo; align with `docs/ARCHITECTURE_INVARIANTS.md`, `docs/EXECUTION_AUTHORIZATION.md`, `docs/IO_ADAPTER_CONTRACT.md`, and `docs/ACTION_EVIDENCE_SCHEMA.md`.
 
-A routine is a repeatable workflow definition that can be run on demand or triggered later by a schedule or input adapter.
+---
 
-Routines are not agents, not tools, and not authority. They may propose or trigger plans through the gateway authority model.
+## What routines are
 
-## Authority Boundary
+- **Routines** are **repeatable workflow definitions**: human-readable and machine-readable descriptions of a goal, allowed context, triggers, risk, output, failure behavior, and what must be true before a plan may be proposed or executed.
+- A routine describes **how** something may be invoked or proposed again; it does **not** perform work by itself.
+- Routines are intended to compose with the existing gateway path: **registry** (installed tools), **policy**, **human authorization** (see `docs/EXECUTION_AUTHORIZATION.md`), **schema validation**, and **sandbox execution** only.
 
-- Gateway remains authority for validation, policy, approval state, registry checks, and execution orchestration.
-- Agents are folders, not services.
-- Routines are workflow definitions, not services.
-- Routine definitions are not execution authority.
-- Schedule is a trigger, not authority.
-- Input adapters are clients/context sources, not authority.
-- Model output is proposal, not authority.
-- Workspace files are evidence and review state, not authority.
-- Registry remains the source of truth for installed tools.
-- Policy decides whether a proposed plan is allowed.
-- Human approval or explicit authorization is required before approved-plan execution.
-- Approval and execution remain separate unless a future explicit `authorize_and_run_once` mode is implemented under `docs/EXECUTION_AUTHORIZATION.md`.
-- Sandbox worker remains the only side-effect execution path.
+---
 
-## Routine Definition Fields
+## What routines are not
 
-| Field | Type | Required | Purpose |
-|-------|------|----------|---------|
-| `routine_id` | string | yes | Stable routine identifier, for example `daily_project_status`. |
-| `agent_id` | string | yes | Agent folder id used for proposal context, for example `project_maintainer_agent`. |
-| `description` | string | yes | Human-readable description of the repeatable workflow. |
-| `trigger_modes` | array | yes | Allowed trigger modes: `on_demand`, `schedule`, and/or `input_adapter`. |
-| `io_envelope` | object or null | optional | Normalized input envelope context, following `docs/IO_ADAPTER_CONTRACT.md`, when triggered by an input adapter. |
-| `allowed_tools` | array | optional | Tool names the routine may reference in proposed plans. This is not execution permission. |
-| `required_capabilities` | array | optional | Capability names or descriptions the routine needs, even when no installed tool exists yet. |
-| `authorization_mode` | string | yes | One of `propose_only`, `approve_for_later`, `authorize_and_run_once`, or `future_scoped_grant`. |
-| `risk_level` | string | yes | Routine risk level, such as `level_0`, `level_1`, `level_2`, `level_3`, or `level_4`. |
-| `output_destinations` | array | yes | One or more of `control_panel_feed`, `workspace_result`, `notification`, or `external_client_response`. |
-| `workspace_requirements` | object | yes | Required workspace/evidence artifacts for review and audit. |
-| `failure_stop_conditions` | array | yes | Conditions that must stop proposal, authorization, or execution. |
-| `created_at` | string | optional | ISO 8601 timestamp for routine definition creation. |
-| `updated_at` | string | optional | ISO 8601 timestamp for routine definition update. |
+- **Not agents**: agents remain folders under `agents/<id>/`; routines are not agent processes or services.
+- **Not tools**: routines do not implement tool behavior or call the sandbox.
+- **Not services**: routines are not daemons, schedulers, or network authorities.
+- **Not execution authorities**: a routine definition file or record does **not** approve, authorize, or execute anything.
+- **Not triggers with authority**: a schedule or adapter firing is **only** a trigger to create context or request a proposal; it is **not** permission to execute.
 
-## Trigger Modes
+---
 
-### `on_demand`
+## Core invariant
 
-An explicit user/client action asks Mini-Jarvis to run or propose the routine.
+**Gateway remains the authority.** Routine definitions, schedules, input adapters, model output, and workspace files are **never** substitutes for gateway validation, policy, registry/schema checks, explicit human authorization where required, and sandbox-side-effect execution.
 
-Rules:
-- The user action is a trigger only.
-- The routine must still pass through gateway proposal, policy, approval/authorization, registry, and sandbox boundaries.
+- **Schedule is trigger, not authority.**
+- **Input adapters are clients, not authority** (see `docs/IO_ADAPTER_CONTRACT.md`).
+- **Model output is proposal, not authority.**
+- **Registry, policy, authorization, schema validation, and sandbox execution remain the enforcement path** for any side effect.
 
-### `schedule`
+---
 
-A future scheduler may trigger the routine at a configured time or interval.
+## Routine definition fields (target schema)
 
-Rules:
-- Schedule is a trigger, not authority.
-- A schedule must not approve plans.
-- A schedule must not execute tools.
-- A schedule must not bypass policy, registry, approval/authorization, or sandbox checks.
+A **future** routine definition should include the following. Field names and enums are contractual targets; storage format (YAML/JSON/SQL) is TBD.
 
-### `input_adapter`
+### Identity and metadata
 
-A future input adapter may trigger the routine from a normalized I/O adapter envelope.
+| Field | Type | Notes |
+|-------|------|--------|
+| `routine_id` | string | Stable identifier, e.g. `daily_project_status`. |
+| `name` | string | Human-facing name. |
+| `version` | string | Definition version string (semver or opaque). |
+| `description` | string | What the routine is for. |
 
-Rules:
-- The input adapter envelope provides context/evidence, not execution authority.
-- `requested_agent_id`, attachments, trusted-network metadata, and requested output mode are preferences/context only.
-- The routine must not treat adapter input as approval or authorization.
+### Lifecycle (definition state, not plan approval)
 
-## Relationship To The Normalized I/O Adapter Envelope
+| Field | Type | Notes |
+|-------|------|--------|
+| `status` | enum | `draft` \| `proposed` \| `approved` \| `enabled` \| `disabled` \| `retired`. Describes the **routine definition** lifecycle, not a single plan’s pending/approved/executed state. |
 
-Routines may be triggered by the normalized envelope described in `docs/IO_ADAPTER_CONTRACT.md`.
+### Ownership and audit
 
-Relevant envelope fields may populate routine context:
-- `source_client`
-- `source_client_version`
-- `device_id`
-- `message` or `user_intent`
-- `input_type`
-- `modalities`
-- `attachments`
-- `trusted_network`
-- `requested_agent_id`
-- `requested_output_mode`
-- `created_at`
+| Field | Type | Notes |
+|-------|------|--------|
+| `owner` | string | Accountable owner (human or org id; format TBD). |
+| `created_by` | string | Who created the definition. |
+| `created_at` | string | ISO 8601. |
+| `updated_at` | string | ISO 8601. |
 
-These fields help describe the request and evidence trail. They do not authorize execution.
+### Trigger modes
 
-## Allowed Tools And Required Capabilities
+| Field | Type | Notes |
+|-------|------|--------|
+| `trigger_modes` | array of enum | Allowed triggers for **starting** routine-related work (proposal path). Values: `manual`, `scheduled`, `input_adapter`, `event_adapter`. |
 
-`allowed_tools` describes tools a routine may reference in proposed plans.
+**Semantics**
 
-Rules:
-- Tool references are not execution permission.
-- Tools must still be installed in the registry before execution.
-- Tool arguments must still validate against registry schema.
-- Policy must still allow the proposed plan.
-- Execution must still go through sandbox worker after approval/authorization.
+- **`manual`**: explicit human or client action (still a client; not authority).
+- **`scheduled`**: time-based trigger only; **no scheduler runtime is implied by this contract**. When a scheduler exists, it must only enqueue or request gateway-safe flows; it must not approve or execute.
+- **`input_adapter`**: normalized ingress per `docs/IO_ADAPTER_CONTRACT.md`; adapter provides context, not authorization.
+- **`event_adapter`**: future event-driven trigger (e.g. device/event feed); same rules as input adapter—**trigger, not authority**.
 
-`required_capabilities` may describe capabilities that do not exist yet.
+### Schedule (optional; descriptive only until scheduler exists)
 
-If a required capability is missing, Mini-Jarvis may propose a tool design or implementation plan, but must not install or execute generated tools automatically.
+| Field | Type | Notes |
+|-------|------|--------|
+| `schedule.enabled` | boolean | Whether a future scheduler should consider this routine. |
+| `schedule.expression_type` | enum | `none` \| `cron` \| `interval` \| `calendar`. |
+| `schedule.expression` | string or null | Opaque expression; interpreted only by future scheduler code under gateway rules. |
+| `schedule.timezone` | string or null | IANA timezone when relevant. |
 
-## Authorization Modes
+### Input contract
 
-### `propose_only`
+| Field | Type | Notes |
+|-------|------|--------|
+| `input_contract.input_sources` | array of enum | e.g. `user_message`, `workspace`, `file`, `device`, `api`. |
+| `input_contract.required_fields` | array | Field names required for a valid run request. |
+| `input_contract.optional_fields` | array | Optional fields. |
+| `input_contract.untrusted_input_allowed` | boolean | If false, untrusted input must not be accepted without explicit policy/UI rules. |
 
-The routine may create or request a proposed plan only.
+### Capabilities and tools
 
-Properties:
-- No approval occurs.
-- No execution occurs.
-- Human review is still required before any side effect.
+| Field | Type | Notes |
+|-------|------|--------|
+| `required_capabilities[]` | objects | Each: `capability_id` (string), `purpose` (string), `required` (boolean). Describes **needs**, not installed tools. |
+| `allowed_agents[]` | objects | Each: `agent_id` (string). Preferences for proposal context; **not** execution grants. |
+| `allowed_tools[]` | objects | Each: `tool_name` (string). Names that may appear in **proposed** plans; **registry remains source of truth**—only `installed` tools may execute. |
 
-### `approve_for_later`
+**Capability / tool relationship**
 
-The routine may support a human approving a reviewed plan for later execution.
+- **Capabilities** are abstract requirements (`required_capabilities`).
+- **Tools** are concrete registry entries (`allowed_tools` references names; execution requires `installed` + schema + policy + authorization + sandbox).
+- A routine may require capabilities that **do not yet** map to an installed tool; see **Missing capability behavior** below.
 
-Properties:
-- Approval does not execute tools.
-- Execution remains a separate explicit action.
-- See `docs/EXECUTION_AUTHORIZATION.md`.
+### Output contract
 
-### `authorize_and_run_once`
+| Field | Type | Notes |
+|-------|------|--------|
+| `output_contract.destinations` | array of enum | e.g. `workspace`, `chat`, `notification`, `file`. |
+| `output_contract.format` | enum | `text` \| `markdown` \| `json`. |
+| `output_contract.evidence_required` | boolean | If true, runs must produce/attach evidence per **Evidence requirements**. |
 
-Future docs-only target for a single explicit human action after review that authorizes and runs the exact reviewed plan once.
+### Authorization (routine-level default; per-run must still match `docs/EXECUTION_AUTHORIZATION.md`)
 
-Properties:
-- Must bind to exact reviewed plan content, such as a `plan_hash`.
-- Must re-check policy and registry/schema at execution time.
-- Must run only through sandbox worker.
-- Must not become hidden auto-execution.
-- See `docs/EXECUTION_AUTHORIZATION.md`.
+| Field | Type | Notes |
+|-------|------|--------|
+| `authorization.mode` | enum | `approve_for_later` \| `authorize_and_run_exact_plan` \| `scoped_grant_future`. Maps conceptually to `docs/EXECUTION_AUTHORIZATION.md` (approve for later; authorize & run exact reviewed plan; future scoped grant). **`execute_approved`** is a separate explicit human step when not using combined authorize-and-run. |
+| `authorization.requires_human` | boolean | If true, no autonomous approval/execution. |
+| `authorization.bind_to_plan_hash` | boolean | If true, any execution must bind to reviewed plan content (e.g. `plan_hash`); invalid if plan changes. |
+| `authorization.grant_id` | string or null | Reference to a future scoped grant record, if any. |
+| `authorization.expires_at` | string or null | ISO 8601; authorization/grant expiry. |
 
-### `future_scoped_grant`
+**Authorization modes (distinction)**
 
-Future-only bounded grant for routine or capability execution.
+1. **Approve for later** — routine may expect a human to approve a plan for later execution; **no execution** in that step.
+2. **Execute an already approved plan** — separate explicit action (not stored as `authorization.mode` on the routine alone; it is the `execute_approved` path in `docs/EXECUTION_AUTHORIZATION.md`).
+3. **Authorize & Run this exact reviewed plan** — single explicit human action after review; **not** hidden auto-execute; must bind to reviewed content when `bind_to_plan_hash` is true.
+4. **Future scoped routine/capability grants** — `scoped_grant_future` only; bounded, expiring, revocable; must not become auto-execute.
 
-Properties:
-- Must be designed and approved separately before implementation.
-- Must be revocable, expiring, auditable, and constrained by risk/capability scope.
-- Must not become a hidden auto-approve or auto-execute channel.
+### Risk
 
-## Output Destinations
+| Field | Type | Notes |
+|-------|------|--------|
+| `risk.level` | enum | `level_0` … `level_4` (see backlog / future risk model). |
+| `risk.side_effects` | array | e.g. `none`, or enumerated side-effect classes when defined. |
+| `risk.network_access` | enum | `none` \| `local` \| `tailnet` \| `internet`. |
+| `risk.destructive` | boolean | |
+| `risk.costly` | boolean | |
 
-Routine output may be directed to one or more future destinations:
+### Failure policy
 
-- `control_panel_feed`: show status/result in a local control panel.
-- `workspace_result`: write review/result evidence into the plan workspace.
-- `notification`: send a notification after proposal, failure, approval need, or completion.
-- `external_client_response`: return a capped response to the triggering client/input adapter.
+| Field | Type | Notes |
+|-------|------|--------|
+| `failure_policy.stop_on_missing_capability` | boolean | |
+| `failure_policy.stop_on_policy_denied` | boolean | |
+| `failure_policy.stop_on_schema_error` | boolean | |
+| `failure_policy.stop_on_tool_failure` | boolean | |
+| `failure_policy.retry_allowed` | boolean | Retries are gateway-controlled; never bypass policy/registry/sandbox. |
+| `failure_policy.max_retries` | integer | |
 
-Output destinations are presentation and evidence channels. They do not authorize execution.
+### Evidence (routine expectations; aligns with `docs/ACTION_EVIDENCE_SCHEMA.md`)
 
-## Workspace And Evidence Requirements
+| Field | Type | Notes |
+|-------|------|--------|
+| `evidence.write_request` | boolean | |
+| `evidence.write_plan` | boolean | |
+| `evidence.write_policy_decision` | boolean | |
+| `evidence.write_authorization_record` | boolean | |
+| `evidence.write_execution_result` | boolean | |
+| `evidence.write_artifacts` | boolean | |
 
-Every routine-triggered proposal or execution should preserve enough evidence for review:
+Workspace artifacts remain **evidence**, not authority.
 
-- routine id and version/reference when available
-- trigger mode
-- triggering source client or scheduler reference
-- normalized I/O adapter envelope reference when applicable
-- proposed plan id and reviewed plan reference
-- policy decision reference
-- authorization mode and authorization reference when applicable
-- workspace path
-- execution log reference when executed
-- result summary or result artifact reference
-- error state if stopped or failed
+### Missing capability behavior
 
-Workspace files remain evidence/review state, not authority.
+| Field | Type | Notes |
+|-------|------|--------|
+| `missing_capability_behavior.action` | enum | `stop` \| `propose_tool` \| `propose_agent` \| `propose_routine_update`. |
+| `missing_capability_behavior.generated_tool_execution_allowed` | boolean | **Must be `false`.** Generated tools stay proposal-only until lifecycle review and **manual** install; no automatic registry installation, no generated tool execution. |
 
-## Failure And Stop Conditions
+---
 
-A routine must stop before approval/authorization/execution if any required condition fails:
+## Lifecycle states (routine definition)
 
-- missing or invalid `routine_id`
-- missing or unknown `agent_id`
-- trigger mode not allowed by the routine definition
-- requested capability is unavailable and no proposal-only fallback is selected
-- proposed tool is not installed in the registry
-- policy denies the proposed plan
-- required human approval/authorization is missing
-- reviewed plan content changes after authorization
-- authorization is expired or revoked
-- registry/schema re-check fails at execution time
-- sandbox execution cannot be used
-- required workspace/evidence artifact cannot be written or referenced
+`draft` → `proposed` → `approved` → `enabled` → (`disabled` | `retired`)
 
-Failure should produce reviewable evidence when possible. Failure must not be converted into permission to proceed.
+- **`draft`**: not ready for use.
+- **`proposed`**: ready for human/gateway review of the definition itself (distinct from plan pending/approval).
+- **`approved`**: definition approved for future enablement.
+- **`enabled`**: may be selected/triggered subject to triggers and gateway rules.
+- **`disabled`**: temporarily off.
+- **`retired`**: terminal; must not be used for new runs.
 
-## Example Shape
+---
+
+## Evidence requirements (summary)
+
+Any routine-invoked flow that can lead to execution must leave an auditable trail consistent with:
+
+- `docs/ACTION_EVIDENCE_SCHEMA.md` (future records),
+- workspace mirrors under `data/workspaces/*` (evidence only),
+- audit log entries (gateway-owned).
+
+At minimum, evidence flags in `evidence.*` express what a compliant implementation should write when those phases occur.
+
+---
+
+## Examples
+
+### Example: read-only status routine (proposal-first)
 
 ```json
 {
   "routine_id": "daily_project_status",
-  "agent_id": "project_maintainer_agent",
-  "description": "Create a read-only project status summary for review.",
-  "trigger_modes": ["on_demand", "schedule"],
-  "io_envelope": null,
-  "allowed_tools": ["list_project_files", "search_repo", "inspect_file"],
-  "required_capabilities": ["read repository state", "summarize changed files"],
-  "authorization_mode": "propose_only",
-  "risk_level": "level_0",
-  "output_destinations": ["control_panel_feed", "workspace_result"],
-  "workspace_requirements": {
+  "name": "Daily project status",
+  "version": "0.1.0",
+  "description": "Summarize repo read-only state for human review.",
+  "status": "draft",
+  "owner": "local-operator",
+  "created_by": "local-operator",
+  "created_at": "2026-05-09T12:00:00Z",
+  "updated_at": null,
+  "trigger_modes": ["manual", "scheduled"],
+  "schedule": {
+    "enabled": false,
+    "expression_type": "none",
+    "expression": null,
+    "timezone": null
+  },
+  "input_contract": {
+    "input_sources": ["user_message"],
+    "required_fields": ["message"],
+    "optional_fields": [],
+    "untrusted_input_allowed": true
+  },
+  "required_capabilities": [
+    { "capability_id": "repo.read_tree", "purpose": "List files safely", "required": true }
+  ],
+  "allowed_agents": [{ "agent_id": "project_maintainer_agent" }],
+  "allowed_tools": [
+    { "tool_name": "list_project_files" },
+    { "tool_name": "search_repo" }
+  ],
+  "output_contract": {
+    "destinations": ["workspace", "chat"],
+    "format": "markdown",
+    "evidence_required": true
+  },
+  "authorization": {
+    "mode": "approve_for_later",
+    "requires_human": true,
+    "bind_to_plan_hash": true,
+    "grant_id": null,
+    "expires_at": null
+  },
+  "risk": {
+    "level": "level_0",
+    "side_effects": ["none"],
+    "network_access": "none",
+    "destructive": false,
+    "costly": false
+  },
+  "failure_policy": {
+    "stop_on_missing_capability": true,
+    "stop_on_policy_denied": true,
+    "stop_on_schema_error": true,
+    "stop_on_tool_failure": true,
+    "retry_allowed": false,
+    "max_retries": 0
+  },
+  "evidence": {
+    "write_request": true,
     "write_plan": true,
     "write_policy_decision": true,
-    "write_authorization_ref": false,
-    "write_execution_log_if_executed": true,
-    "write_result_if_executed": true
+    "write_authorization_record": true,
+    "write_execution_result": true,
+    "write_artifacts": true
   },
-  "failure_stop_conditions": [
-    "policy_denied",
-    "tool_not_installed",
-    "authorization_missing",
-    "sandbox_unavailable"
-  ],
-  "created_at": "2026-05-09T00:00:00Z",
-  "updated_at": null
+  "missing_capability_behavior": {
+    "action": "propose_tool",
+    "generated_tool_execution_allowed": false
+  }
 }
 ```
 
-## Generated Tools Rule
+---
 
-Missing capabilities may produce a proposed tool design, schema, or implementation plan.
+## Non-goals (explicit)
 
-They must not:
-- install generated tools automatically
-- execute generated tools automatically
-- bypass tool lifecycle review
-- bypass registry installation status
-- bypass policy, approval/authorization, or sandbox execution
+- No embedded scheduler implementation in this contract.
+- No automatic approval or automatic execution from routine definition alone.
+- No “routine installs tools” or “routine elevates registry” behavior.
+- No apply-patch or generated tool execution from routine triggers.
+- No using routine files as authority over gateway policy or approval state.
 
-## Future Implementation Rules
+---
 
-- Add runtime routine behavior only in a future branch with explicit approval.
-- Do not add scheduler behavior as part of this contract.
-- Do not add endpoints as part of this contract.
-- Do not treat routine definitions as authority.
-- Keep routine-triggered work on the existing gateway authority path.
+## Relationship to other contracts
 
+| Document | Relationship |
+|----------|----------------|
+| `docs/EXECUTION_AUTHORIZATION.md` | Human authorization modes, `plan_hash` binding, expiry/revocation, and execution re-check rules. |
+| `docs/IO_ADAPTER_CONTRACT.md` | Input/event adapters as clients; normalized envelope as context. |
+| `docs/ACTION_EVIDENCE_SCHEMA.md` | Future structured evidence for proposals and executions. |
+| `docs/ARCHITECTURE_INVARIANTS.md` | Non-negotiable gateway, registry, policy, sandbox boundaries. |
+
+---
+
+## Future implementation rules
+
+- Implement routine runtime only in a future branch with explicit approval.
+- Any scheduler must **only** trigger gateway-safe proposal/review flows unless a separate, explicitly approved authorization model exists.
+- Routines that reference tools must still respect **installed-only** execution, policy re-check at execution time, and **sandbox worker** as the sole side-effect path.
