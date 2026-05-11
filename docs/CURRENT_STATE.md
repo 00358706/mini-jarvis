@@ -40,6 +40,9 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 ## Current local review dashboard (client-only)
 - `integrations/local_dashboard/` — static HTML/JS demo UI that uses gateway endpoints only (no gateway changes).
 
+## Current automation lab (proposal-only)
+- `scripts/automation_lab_propose.ps1` uses `automation_lab.py` to write review artifacts under `data/automation_lab/<request_id>/`; it does not change `/ingest`, add endpoints, call models, approve/authorize plans, execute tools, call the sandbox worker, or mutate the registry.
+
 ## Current design checkpoints
 - `docs/ACTION_EVIDENCE_SCHEMA.md` is a docs-only structured action evidence schema proposal for future action assurance; it is not implemented in runtime code.
 - `docs/IO_ADAPTER_CONTRACT.md` is a docs-only I/O adapter contract for future trusted-network input/device work; it is not implemented in runtime code.
@@ -60,4 +63,5 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `scripts/test_external_ui_flow.ps1`
 - `scripts/test_openwebui_action_wrapper.ps1`
 - `scripts/test_openwebui_plan_review_wrapper.ps1`
+- `scripts/test_automation_lab_proposal.ps1`
 
