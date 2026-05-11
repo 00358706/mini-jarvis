@@ -14,9 +14,74 @@ Before implementing anything here, read:
 
 ## Current recommended next branch
 
-No single “next branch” is recommended right now. Pick a backlog item explicitly and keep changes small and branch-scoped.
+### `routine-contract`
 
+Define repeatable workflow definitions before adding any routine runtime.
+
+Scope:
+- Docs/schema only.
+- Add `docs/ROUTINE_CONTRACT.md`.
+- Define routine fields, trigger modes, authorization relationship, capability requirements, output/evidence requirements, missing capability behavior, and lifecycle states.
+- Clarify that schedules/input adapters are triggers, not authority.
+- Clarify that routines are not agents, tools, services, or execution authorities.
+
+Rules:
+- Do not change runtime execution behavior.
+- Do not add scheduler runtime.
+- Do not add generated tool execution.
+- Do not add automatic tool registration.
+- Do not change `/ingest`.
+- Gateway remains authority.
+- Registry, policy, authorization, schema validation, and sandbox execution remain the enforcement path.
+
+Suggested follow-up branch:
+- `capability-registry-schema`
 ## Near-term backlog
+
+### Routine contract later
+
+Problem:
+Mini-Jarvis needs a first-class way to describe repeatable workflows without turning schedules, agents, or input adapters into execution authorities.
+
+Goal:
+Define a routine as a repeatable workflow definition that can be triggered manually, by schedule, or by an input adapter, while preserving gateway authority.
+
+A routine may describe:
+- goal
+- trigger modes
+- required capabilities
+- allowed agents/tools
+- input contract
+- output destination
+- authorization mode
+- risk level
+- evidence requirements
+- failure behavior
+- missing capability behavior
+
+A routine must not:
+- execute tools directly
+- approve itself
+- install generated tools
+- bypass policy
+- bypass registry/schema checks
+- bypass sandbox execution
+- treat schedule as authority
+- treat model output as authority
+
+Design rules:
+- Schedule is trigger, not authority.
+- Input adapters are clients, not authority.
+- Routine files are configuration/review state, not authority.
+- Missing capabilities may produce proposal artifacts.
+- Generated tools remain proposal-only until reviewed, tested, approved, and installed.
+- Human authorization or a future valid scoped grant is required before side-effect execution.
+
+Safe first branch:
+- `routine-contract`
+- Add `docs/ROUTINE_CONTRACT.md`.
+- Update docs/backlog references only.
+- Do not change runtime behavior.
 
 ### Routines later
 
@@ -151,7 +216,55 @@ Possible risk levels:
 - `level_3`: destructive, networked, or costly
 - `level_4`: special manual confirmation
 
+### Tool duplication / capability reuse later
+
+Problem:
+As generated-tool proposals become possible, the system may create tools with different names but substantially overlapping behavior.
+
+Examples:
+- `navidrome_recent_albums`
+- `navidrome_list_new_albums`
+- `get_new_navidrome_releases`
+
+Goal:
+Before proposing a new tool, the system should determine whether the requested capability can be:
+- satisfied by an existing installed tool
+- handled by extending an existing tool
+- composed from existing tools
+- or truly requires a new tool
+
+Possible future design:
+- Add richer registry metadata for each tool:
+  - purpose
+  - input schema summary
+  - output schema summary
+  - side effects
+  - capability tags
+- Search existing tools by capability, not only by tool name.
+- Add a duplicate/overlap check before generated-tool proposal.
+- Require a proposed new tool to explain why existing tools are insufficient.
+- Surface likely overlaps during human review.
+
+Possible outcomes of overlap review:
+- reuse existing tool
+- extend existing tool
+- compose existing tools
+- create new tool
+- reject as duplicate
+
+Rules:
+- Registry remains the source of truth for installed tools.
+- Model output remains proposal, not authority.
+- Do not install a new tool solely because the model proposed one.
+- Prefer reuse or extension over near-duplicate tools when contracts substantially overlap.
+- Keep duplicate detection advisory at first; human review remains decisive.
+
+Safe first step:
+- Add capability metadata fields to the future tool proposal / registry design.
+- Do not change runtime execution behavior in the first pass.
+
 ## Medium-term backlog
+
 
 ### Orchestrator agent later
 
