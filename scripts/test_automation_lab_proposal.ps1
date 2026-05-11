@@ -92,6 +92,7 @@ try {
     Assert-True ($result.authority_boundary.tools_executed -eq $false) "Result claims tools were executed."
     Assert-True ($result.authority_boundary.sandbox_worker_invoked -eq $false) "Result claims sandbox worker was invoked."
     Assert-True ($result.authority_boundary.registry_modified -eq $false) "Result claims registry was modified."
+    Assert-True ($result.authority_boundary.model_called -eq $false) "Local model should be disabled by default."
 
     $outputDir = [string]$result.output_dir_abs
     $automationRoot = Join-Path $RepoRoot "data\automation_lab"
@@ -119,6 +120,8 @@ try {
     $toolProposalText = Get-Content -Raw -LiteralPath (Join-Path $outputDir "TOOL_PROPOSAL.md")
 
     Assert-True ($request.authority_boundary.proposal_only -eq $true) "REQUEST.json is not proposal-only."
+    Assert-True ($request.local_model.enabled -eq $false) "REQUEST.json should record local model disabled by default."
+    Assert-True ($request.authority_boundary.model_called -eq $false) "REQUEST.json should record model_called false by default."
     Assert-True ($request.authority_boundary.plans_approved -eq $false) "REQUEST.json claims plans approved."
     Assert-True ($request.authority_boundary.plans_authorized -eq $false) "REQUEST.json claims plans authorized."
     Assert-True ($classification.authority_boundary.tools_executed -eq $false) "CLASSIFICATION.json claims tools executed."
@@ -130,6 +133,9 @@ try {
     Assert-True ($summaryText -match 'Tools executed:\s*false') "REVIEW_SUMMARY.md must state tools executed: false."
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $outputDir "EXECUTION_LOG.jsonl"))) "Automation lab must not write execution logs."
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $outputDir "PLAN.json"))) "Automation lab must not create executable plan state."
+    foreach ($modelArtifact in @("MODEL_REQUEST.json", "MODEL_RESPONSE.json", "MODEL_VALIDATION.json", "MODEL_DRAFT.md")) {
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $outputDir $modelArtifact))) "Model artifact '$modelArtifact' should not be written unless local model mode is enabled."
+    }
 
     $allowedOutcomes = Get-AllowedCapabilityOutcomes -RepoRoot $RepoRoot
     $observedOutcomes = @($capabilities.primary_outcome)

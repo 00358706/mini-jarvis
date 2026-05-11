@@ -4,7 +4,15 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Message,
 
-    [string]$RequestId
+    [string]$RequestId,
+
+    [switch]$UseLocalModel,
+
+    [string]$ModelBaseUrl = "http://127.0.0.1:10000/v1",
+
+    [string]$ModelName = "local-model",
+
+    [switch]$StrictModel
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,6 +95,20 @@ $ArgsList = @(
 
 if ($RequestId -and $RequestId.Trim()) {
     $ArgsList += @("--request-id", $RequestId.Trim())
+}
+
+if ($UseLocalModel) {
+    $ArgsList += @(
+        "--use-local-model",
+        "--model-base-url",
+        $ModelBaseUrl,
+        "--model-name",
+        $ModelName
+    )
+}
+
+if ($StrictModel) {
+    $ArgsList += "--strict-model"
 }
 
 & $Py @ArgsList

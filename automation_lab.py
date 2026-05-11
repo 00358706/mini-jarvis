@@ -3,7 +3,8 @@ Proposal-only automation lab artifact generator.
 
 This module writes review artifacts under data/automation_lab/<request_id>/.
 It does not import or call gateway runtime modules, registry lifecycle code,
-tool implementations, sandbox code, model runtimes, or approval paths.
+tool implementations, sandbox code, or approval paths. Optional local model
+drafting is explicit and advisory only.
 """
 
 from __future__ import annotations
@@ -44,6 +45,12 @@ AUTHORITY_BOUNDARY = {
 }
 
 
+def authority_boundary(*, model_called: bool = False) -> dict[str, Any]:
+    boundary = dict(AUTHORITY_BOUNDARY)
+    boundary["model_called"] = model_called
+    return boundary
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -67,7 +74,7 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
-def classify_message(message: str) -> dict[str, Any]:
+def classify_message(message: str, *, model_called: bool = False) -> dict[str, Any]:
     lower = message.lower()
     matched_rules: list[str] = []
 
@@ -112,7 +119,7 @@ def classify_message(message: str) -> dict[str, Any]:
         "domain": domain,
         "deterministic": True,
         "matched_rules": matched_rules,
-        "authority_boundary": dict(AUTHORITY_BOUNDARY),
+        "authority_boundary": authority_boundary(model_called=model_called),
     }
 
 
@@ -133,7 +140,13 @@ def capability_id_for(message: str, classification: dict[str, Any]) -> str:
     return f"automation_lab.{suffix}"
 
 
-def build_capability_matches(message: str, request_id: str, classification: dict[str, Any]) -> dict[str, Any]:
+def build_capability_matches(
+    message: str,
+    request_id: str,
+    classification: dict[str, Any],
+    *,
+    model_called: bool = False,
+) -> dict[str, Any]:
     proposal_kind = classification["proposal_kind"]
     domain = classification["domain"]
 
@@ -195,7 +208,7 @@ def build_capability_matches(message: str, request_id: str, classification: dict
             "action": missing_action,
             "generated_tool_execution_allowed": False,
         },
-        "authority_boundary": dict(AUTHORITY_BOUNDARY),
+        "authority_boundary": authority_boundary(model_called=model_called),
     }
 
 
@@ -219,8 +232,17 @@ def review_summary_markdown(
     classification: dict[str, Any],
     capability_matches: dict[str, Any],
     artifacts: list[str],
+    *,
+    model_enabled: bool = False,
+    model_validation: dict[str, Any] | None = None,
 ) -> str:
     artifact_lines = "\n".join(f"- `{name}`" for name in artifacts)
+    model_state = "disabled"
+    if model_enabled:
+        state = "unknown"
+        if model_validation:
+            state = str(model_validation.get("validation_state", "unknown"))
+        model_state = f"enabled ({state})"
     return f"""# Automation Lab Review Summary
 
 Request id: `{request_id}`
@@ -233,6 +255,8 @@ Message:
 Classification: `{classification["proposal_kind"]}`
 
 Primary capability outcome: `{capability_matches["primary_outcome"]}`
+
+Local model draft: `{model_state}`
 
 Artifacts:
 {artifact_lines}
@@ -247,6 +271,7 @@ Authority boundary:
 - Tools executed: false
 - Sandbox worker invoked: false
 - Registry modified: false
+- Model called: {str(model_enabled).lower()}
 - Generated tool execution allowed: false
 
 Reviewer notes:
@@ -358,7 +383,15 @@ Agents are folders/configuration only. This proposal cannot run services, execut
 """
 
 
-def generate(message: str, request_id: str | None = None) -> dict[str, Any]:
+def generate(
+    message: str,
+    request_id: str | None = None,
+    *,
+    use_local_model: bool = False,
+    model_base_url: str = "http://127.0.0.1:10000/v1",
+    model_name: str = "local-model",
+    strict_model: bool = False,
+) -> dict[str, Any]:
     if not message or not message.strip():
         raise ValueError("Message is required.")
 
@@ -369,8 +402,14 @@ def generate(message: str, request_id: str | None = None) -> dict[str, Any]:
     root.mkdir(parents=True)
 
     created_at = utc_now()
-    classification = classify_message(message)
-    capability_matches = build_capability_matches(message, rid, classification)
+    classification = classify_message(message, model_called=use_local_model)
+    capability_matches = build_capability_matches(
+        message,
+        rid,
+        classification,
+        model_called=use_local_model,
+    )
+    boundary = authority_boundary(model_called=use_local_model)
 
     request_payload = {
         "schema_version": "automation-lab-request.v1",
@@ -378,7 +417,14 @@ def generate(message: str, request_id: str | None = None) -> dict[str, Any]:
         "message": message,
         "source_client": "scripts/automation_lab_propose.ps1",
         "created_at": created_at,
-        "authority_boundary": dict(AUTHORITY_BOUNDARY),
+        "local_model": {
+            "enabled": use_local_model,
+            "base_url": model_base_url if use_local_model else None,
+            "model_name": model_name if use_local_model else None,
+            "strict_model": strict_model,
+            "tool_calling_enabled": False,
+        },
+        "authority_boundary": boundary,
     }
 
     artifacts = [
@@ -408,10 +454,75 @@ def generate(message: str, request_id: str | None = None) -> dict[str, Any]:
         write_text(root / optional_artifact, agent_proposal_markdown(message, rid))
         artifacts.append(optional_artifact)
 
+    model_validation: dict[str, Any] | None = None
+    if use_local_model:
+        from local_model_adapter import draft_with_local_model
+
+        model_result = draft_with_local_model(
+            message=message,
+            classification=classification,
+            capability_matches=capability_matches,
+            base_url=model_base_url,
+            model_name=model_name,
+        )
+        model_request = {
+            "schema_version": "automation-lab-model-request.v1",
+            "request_id": rid,
+            "adapter_id": "automation_lab_openai_compatible_local",
+            "runtime_type": "openai_compatible_local",
+            "base_url": model_base_url,
+            "model_name": model_name,
+            "strict_model": strict_model,
+            "tool_calling_enabled": False,
+            "generated_tool_execution_allowed": False,
+            "request_payload": model_result.request,
+            "authority_boundary": boundary,
+        }
+        model_response = {
+            "schema_version": "automation-lab-model-response.v1",
+            "request_id": rid,
+            "advisory_only": True,
+            "response": model_result.response,
+            "authority_boundary": boundary,
+        }
+        model_validation = {
+            **model_result.validation,
+            "request_id": rid,
+            "strict_model": strict_model,
+            "model_output_is_proposal_not_authority": True,
+            "authority_boundary": boundary,
+        }
+
+        write_json(root / "MODEL_REQUEST.json", model_request)
+        write_json(root / "MODEL_RESPONSE.json", model_response)
+        write_json(root / "MODEL_VALIDATION.json", model_validation)
+        write_text(root / "MODEL_DRAFT.md", model_result.draft_markdown)
+        artifacts.extend(
+            [
+                "MODEL_REQUEST.json",
+                "MODEL_RESPONSE.json",
+                "MODEL_VALIDATION.json",
+                "MODEL_DRAFT.md",
+            ]
+        )
+
     write_text(
         root / "REVIEW_SUMMARY.md",
-        review_summary_markdown(message, rid, classification, capability_matches, artifacts),
+        review_summary_markdown(
+            message,
+            rid,
+            classification,
+            capability_matches,
+            artifacts,
+            model_enabled=use_local_model,
+            model_validation=model_validation,
+        ),
     )
+
+    if strict_model and model_validation and not model_validation.get("valid"):
+        raise RuntimeError(
+            f"Strict local model mode failed validation; review artifacts were written to {root}"
+        )
 
     return {
         "status": "created",
@@ -421,7 +532,13 @@ def generate(message: str, request_id: str | None = None) -> dict[str, Any]:
         "artifacts": artifacts,
         "proposal_kind": classification["proposal_kind"],
         "primary_capability_outcome": capability_matches["primary_outcome"],
-        "authority_boundary": dict(AUTHORITY_BOUNDARY),
+        "local_model": {
+            "enabled": use_local_model,
+            "validation_state": (
+                model_validation.get("validation_state") if model_validation else "not_requested"
+            ),
+        },
+        "authority_boundary": boundary,
     }
 
 
@@ -429,12 +546,31 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create proposal-only automation lab artifacts.")
     parser.add_argument("--message", required=True, help="User request to classify and draft.")
     parser.add_argument("--request-id", default=None, help="Optional safe request id for tests/review.")
+    parser.add_argument("--use-local-model", action="store_true", help="Attempt optional local model drafting.")
+    parser.add_argument(
+        "--model-base-url",
+        default="http://127.0.0.1:10000/v1",
+        help="OpenAI-compatible local API base URL.",
+    )
+    parser.add_argument("--model-name", default="local-model", help="Local model name/id.")
+    parser.add_argument(
+        "--strict-model",
+        action="store_true",
+        help="Fail the CLI if optional model drafting fails validation.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    result = generate(args.message, args.request_id)
+    result = generate(
+        args.message,
+        args.request_id,
+        use_local_model=args.use_local_model,
+        model_base_url=args.model_base_url,
+        model_name=args.model_name,
+        strict_model=args.strict_model,
+    )
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
