@@ -14,28 +14,35 @@ Before implementing anything here, read:
 
 ## Current recommended next branch
 
-### `routine-contract`
+### `capability-registry-schema`
 
-Define repeatable workflow definitions before adding any routine runtime.
+Define richer registry metadata so Mini-Jarvis can reason about tool capabilities before proposing new tools.
 
 Scope:
 - Docs/schema only.
-- Add `docs/ROUTINE_CONTRACT.md`.
-- Define routine fields, trigger modes, authorization relationship, capability requirements, output/evidence requirements, missing capability behavior, and lifecycle states.
-- Clarify that schedules/input adapters are triggers, not authority.
-- Clarify that routines are not agents, tools, services, or execution authorities.
+- Add `docs/CAPABILITY_REGISTRY_SCHEMA.md`.
+- Define capability metadata for installed tools.
+- Define how tools advertise purpose, inputs, outputs, side effects, risk level, tags, composability, and overlap relationships.
+- Define advisory outcomes for capability lookup:
+  - `reuse_existing`
+  - `extend_existing`
+  - `compose_existing`
+  - `propose_new`
+  - `reject_duplicate`
+- Clarify that capability matching is advisory at first and does not change runtime execution behavior.
 
 Rules:
 - Do not change runtime execution behavior.
-- Do not add scheduler runtime.
-- Do not add generated tool execution.
-- Do not add automatic tool registration.
 - Do not change `/ingest`.
-- Gateway remains authority.
-- Registry, policy, authorization, schema validation, and sandbox execution remain the enforcement path.
+- Do not add generated tool execution.
+- Do not add automatic tool registration or automatic registry installation.
+- Do not add model-driven tool installation.
+- Registry remains the source of truth for installed tools.
+- Model output remains proposal, not authority.
+- Gateway, policy, authorization, schema validation, and sandbox execution remain the enforcement path.
 
 Suggested follow-up branch:
-- `capability-registry-schema`
+- `tool-proposal-schema`
 
 ## Near-term backlog
 
