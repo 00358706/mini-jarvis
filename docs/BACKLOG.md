@@ -14,37 +14,40 @@ Before implementing anything here, read:
 
 ## Current recommended next branch
 
-### `capability-registry-schema`
+No single “next branch” is recommended right now. Pick a backlog item explicitly and keep changes small and branch-scoped.
 
-Define richer registry metadata so Mini-Jarvis can reason about tool capabilities before proposing new tools.
+## Near-term backlog
 
-Scope:
-- Docs/schema only.
-- Add `docs/CAPABILITY_REGISTRY_SCHEMA.md`.
-- Define capability metadata for installed tools.
-- Define how tools advertise purpose, inputs, outputs, side effects, risk level, tags, composability, and overlap relationships.
-- Define advisory outcomes for capability lookup:
-  - `reuse_existing`
-  - `extend_existing`
-  - `compose_existing`
-  - `propose_new`
-  - `reject_duplicate`
-- Clarify that capability matching is advisory at first and does not change runtime execution behavior.
+### Tool proposal schema later
+
+Structured tool proposal artifacts should follow `docs/TOOL_PROPOSAL_SCHEMA.md` before any generated-tool, registry lifecycle, or runtime work.
+
+Goal:
+Define review-only artifacts for proposed new or materially changed tools after capability lookup.
+
+A tool proposal should describe:
+- capability lookup results and candidate tools considered
+- why `reuse_existing`, `extend_existing`, `compose_existing`, or `reject_duplicate` is not the selected outcome before `propose_new`
+- proposed inputs, outputs, side effects, risk level, and network access
+- sandbox expectations, implementation plan, and test plan
+- review outcome and decision notes
 
 Rules:
+- Tool proposals are review artifacts only.
+- Approval for implementation is not approval for execution.
+- Registry `status=installed` remains the only execution truth after manual install.
+- Registry, policy, authorization, schema validation, and sandbox execution remain the enforcement path.
 - Do not change runtime execution behavior.
 - Do not change `/ingest`.
 - Do not add generated tool execution.
 - Do not add automatic tool registration or automatic registry installation.
 - Do not add model-driven tool installation.
-- Registry remains the source of truth for installed tools.
-- Model output remains proposal, not authority.
-- Gateway, policy, authorization, schema validation, and sandbox execution remain the enforcement path.
+- Do not add endpoints or MCP tools.
 
-Suggested follow-up branch:
-- `tool-proposal-schema`
-
-## Near-term backlog
+Safe first branch:
+- `tool-proposal-schema` adds or refines `docs/TOOL_PROPOSAL_SCHEMA.md`.
+- Update `docs/CURRENT_STATE.md` only for a docs-only design checkpoint.
+- Do not make backlog "current recommended next branch" wording depend on the active branch.
 
 ### Routine contract later
 
