@@ -41,7 +41,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `integrations/local_dashboard/` — static HTML/JS demo UI that uses gateway endpoints only (no gateway changes).
 
 ## Current automation lab (proposal-only)
-- `scripts/automation_lab_propose.ps1` uses `automation_lab.py` to write indexed review artifacts under `data/automation_lab/<request_id>/`; optional local-model drafting via `local_model_adapter.py` and optional static capability fixture lookup via `fixtures/automation_lab/capabilities.json` are explicitly enabled, advisory only, and record evidence. `INDEX.json` is review evidence only and marks artifacts as non-authority. The lab does not change `/ingest`, add endpoints, approve/authorize plans, execute tools, call the sandbox worker, install tools, or mutate the registry.
+- `scripts/automation_lab_propose.ps1` uses `automation_lab.py` to write indexed review artifacts under `data/automation_lab/<request_id>/`; optional local-model drafting via `local_model_adapter.py` and optional static capability fixture lookup via `fixtures/automation_lab/capabilities.json` are explicitly enabled, advisory only, and record evidence. `scripts/automation_lab_review.ps1` reads `INDEX.json` and prints a compact review summary without modifying artifacts. `INDEX.json` is review evidence only and marks artifacts as non-authority. The lab does not change `/ingest`, add endpoints, approve/authorize plans, execute tools, call the sandbox worker, install tools, call local models from review, or mutate the registry.
 
 ## Current design checkpoints
 - `docs/ACTION_EVIDENCE_SCHEMA.md` is a docs-only structured action evidence schema proposal for future action assurance; it is not implemented in runtime code.
@@ -67,3 +67,4 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `scripts/test_automation_lab_local_model_draft.ps1`
 - `scripts/test_automation_lab_capability_fixtures.ps1`
 - `scripts/test_automation_lab_review_artifact_index.ps1`
+- `scripts/test_automation_lab_review_summary.ps1`

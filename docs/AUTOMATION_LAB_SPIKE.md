@@ -38,6 +38,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\automation_lab_propose.ps1 `
 
 Fixture lookup only improves `CAPABILITY_MATCHES.json` fields such as `candidate_tools`, `primary_outcome`, `lookup_notes`, and `outcomes_considered`.
 
+Read-only review summary for an existing run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\automation_lab_review.ps1 -RequestId "<request_id>"
+```
+
+The review command also accepts `-Path` pointing to either a run directory or its `INDEX.json`. It reads `INDEX.json` only, prints a compact review summary, and does not modify artifacts, call local models, approve/authorize plans, execute tools, or touch the registry.
+
 ## Artifacts
 
 Each run writes:
