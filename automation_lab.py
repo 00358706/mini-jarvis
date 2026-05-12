@@ -2,9 +2,10 @@
 Proposal-only automation lab artifact generator.
 
 This module writes review artifacts under data/automation_lab/<request_id>/.
-It does not import or call gateway runtime modules, registry lifecycle code,
-tool implementations, sandbox code, or approval paths. Optional local model
-drafting is explicit and advisory only.
+It does not import or call gateway runtime modules (except a narrow read-only
+registry reader), registry lifecycle mutation, tool implementations, sandbox
+code, or approval paths. Optional local model drafting is explicit and advisory
+only.
 """
 
 from __future__ import annotations
@@ -16,6 +17,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from automation_lab_registry_read import perform_registry_capability_lookup
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -263,6 +266,90 @@ def build_outcomes_considered(
     return considered
 
 
+def merge_tool_candidates(
+    existing: list[Any],
+    extras: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge tool rows by tool_name; longer combined match_notes win for review."""
+    by_name: dict[str, dict[str, Any]] = {}
+    for item in existing:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("tool_name")
+        if not name:
+            continue
+        by_name[str(name)] = {k: v for k, v in item.items()}
+    for rc in extras:
+        if not isinstance(rc, dict):
+            continue
+        name = rc.get("tool_name")
+        if not name:
+            continue
+        key = str(name)
+        prev = by_name.get(key)
+        if prev is None:
+            by_name[key] = dict(rc)
+            continue
+        merged = dict(prev)
+        notes = [str(prev.get("match_notes") or ""), str(rc.get("match_notes") or "")]
+        merged["match_notes"] = " | ".join(n for n in notes if n).strip()
+        for fld in ("registry_status", "domain_inferred", "confidence", "capability_ids"):
+            if fld in rc and rc[fld] is not None:
+                merged[fld] = rc[fld]
+        by_name[key] = merged
+    return list(by_name.values())
+
+
+def apply_registry_capability_lookup(
+    capability_matches: dict[str, Any],
+    message: str,
+    request_id: str,
+    classification: dict[str, Any],
+    *,
+    model_called: bool = False,
+) -> dict[str, Any]:
+    payload = perform_registry_capability_lookup(message, classification)
+    out = dict(capability_matches)
+    out["schema_version"] = "automation-lab-capability-matches.v2"
+    out["request_id"] = request_id
+    out["registry_lookup"] = payload["registry_lookup"]
+    out["registry_matches"] = payload["registry_matches"]
+    sources = ["deterministic_template"]
+    if payload["registry_lookup"].get("registry_read"):
+        sources.append("registry_readonly")
+    out["evidence_sources"] = sources
+    out["primary_outcome_source"] = "deterministic_template"
+
+    sug = payload["suggested_primary_outcome"]
+    out["candidate_tools"] = merge_tool_candidates(
+        out.get("candidate_tools") or [],
+        payload["suggested_candidate_tools"],
+    )
+    extra_note = payload["suggested_lookup_notes"]
+    if sug:
+        out["primary_outcome"] = sug
+        out["primary_outcome_source"] = "registry_metadata"
+        out["outcomes_considered"] = build_outcomes_considered(
+            sug,
+            classification["proposal_kind"],
+            selected_note=(
+                "Primary outcome influenced by read-only registry tool metadata scoring (advisory)."
+            ),
+        )
+        out["lookup_notes"] = extra_note
+        out["missing_capability_behavior"] = {
+            "action": missing_action_for_outcome(sug, classification["proposal_kind"]),
+            "generated_tool_execution_allowed": False,
+        }
+    else:
+        prev = out.get("lookup_notes") or ""
+        out["lookup_notes"] = (prev + " " + extra_note).strip()
+
+    out["source"] = "+".join(out["evidence_sources"])
+    out["authority_boundary"] = authority_boundary(model_called=model_called)
+    return out
+
+
 def resolve_fixture_path(fixture_path: str | None) -> Path | None:
     if not fixture_path or not fixture_path.strip():
         return None
@@ -331,47 +418,36 @@ def apply_capability_fixture_lookup(
 
     fixture_match = select_capability_fixture(message, fixture_doc)
     updated = dict(capability_matches)
+    rel_fixture = (
+        str(fixture_path.relative_to(REPO_ROOT)).replace("\\", "/")
+        if fixture_path.is_relative_to(REPO_ROOT)
+        else str(fixture_path)
+    )
     updated["fixture_lookup"] = {
         "enabled": True,
-        "fixture_path": str(fixture_path.relative_to(REPO_ROOT)).replace("\\", "/")
-        if fixture_path.is_relative_to(REPO_ROOT)
-        else str(fixture_path),
+        "fixture_path": rel_fixture,
         "advisory_only": True,
-        "registry_read": False,
+        "fixture_file_only": True,
+        "queries_python_registry": False,
         "registry_modified": False,
         "matched_fixture_id": None,
         "matched_terms": [],
     }
 
     if fixture_match is None:
-        primary_outcome = "propose_new"
-        lookup_notes = (
-            "Static fixture lookup found no matching candidate. This is an advisory "
-            "review signal only; registry status was not read or changed."
+        updated["request_id"] = request_id
+        es = list(updated.get("evidence_sources") or [])
+        if "static_fixture_no_match" not in es:
+            es.append("static_fixture_no_match")
+        updated["evidence_sources"] = es
+        updated["source"] = "+".join(es)
+        extra = (
+            " Static fixture file found no phrase match; preserved registry-informed "
+            "primary outcome and candidate_tools when present."
         )
-        updated.update(
-            {
-                "request_id": request_id,
-                "source": "static_fixture_lookup_no_match",
-                "primary_outcome": primary_outcome,
-                "outcomes_considered": build_outcomes_considered(
-                    primary_outcome,
-                    classification["proposal_kind"],
-                    selected_note="Selected because the optional fixture lookup found no candidate.",
-                ),
-                "candidate_tools": [],
-                "capability_ids": [capability_id_for(message, classification)],
-                "lookup_notes": lookup_notes,
-                "missing_capability_behavior": {
-                    "action": missing_action_for_outcome(
-                        primary_outcome,
-                        classification["proposal_kind"],
-                    ),
-                    "generated_tool_execution_allowed": False,
-                },
-                "authority_boundary": authority_boundary(model_called=model_called),
-            }
-        )
+        updated["lookup_notes"] = (updated.get("lookup_notes") or "") + extra
+        updated["lookup_notes"] = updated["lookup_notes"].strip()
+        updated["authority_boundary"] = authority_boundary(model_called=model_called)
         return updated
 
     fixture, matched_terms = fixture_match
@@ -392,17 +468,30 @@ def apply_capability_fixture_lookup(
             "matched_terms": matched_terms,
         }
     )
+    fx_raw = fixture.get("candidate_tools", [])
+    fx_list = [dict(x) for x in fx_raw] if isinstance(fx_raw, list) else []
+    merged_candidates = merge_tool_candidates(updated.get("candidate_tools") or [], fx_list)
+
+    es = list(updated.get("evidence_sources") or [])
+    if "static_fixture_matched" not in es:
+        es.append("static_fixture_matched")
+
     updated.update(
         {
             "request_id": request_id,
-            "source": f"static_fixture_lookup:{fixture_id}",
+            "evidence_sources": es,
+            "source": "+".join(es) + f"+fixture:{fixture_id}",
             "primary_outcome": primary_outcome,
+            "primary_outcome_source": "static_fixture",
             "outcomes_considered": build_outcomes_considered(
                 primary_outcome,
                 classification["proposal_kind"],
-                selected_note=f"Selected by optional static fixture `{fixture_id}`.",
+                selected_note=(
+                    f"Primary outcome selected by optional static fixture `{fixture_id}`; "
+                    "`registry_matches` remains registry evidence for the same request."
+                ),
             ),
-            "candidate_tools": fixture.get("candidate_tools", []),
+            "candidate_tools": merged_candidates,
             "capability_ids": fixture.get(
                 "capability_ids",
                 [capability_id_for(message, classification)],
@@ -464,6 +553,24 @@ def build_artifact_index(
             else None,
             "advisory_only": True,
         },
+        "registry_capability_lookup": {
+            "enabled": bool(
+                isinstance(capability_matches.get("registry_lookup"), dict)
+                and (capability_matches.get("registry_lookup") or {}).get("enabled")
+            ),
+            "registry_read": (
+                (capability_matches.get("registry_lookup") or {}).get("registry_read")
+                if isinstance(capability_matches.get("registry_lookup"), dict)
+                else None
+            ),
+            "tools_inspected_count": (
+                (capability_matches.get("registry_lookup") or {}).get("tools_inspected_count")
+                if isinstance(capability_matches.get("registry_lookup"), dict)
+                else None
+            ),
+            "primary_outcome_source": capability_matches.get("primary_outcome_source"),
+            "evidence_sources": capability_matches.get("evidence_sources"),
+        },
         "authority": False,
         "authority_boundary": boundary,
         "artifacts": [artifact_entry(name) for name in artifacts],
@@ -499,6 +606,12 @@ Message:
 Classification: `{classification["proposal_kind"]}`
 
 Primary capability outcome: `{capability_matches["primary_outcome"]}`
+
+Primary outcome source: `{capability_matches.get("primary_outcome_source", "unknown")}`
+
+Capability evidence sources: `{", ".join(capability_matches.get("evidence_sources") or [])}`
+
+Registry matches recorded: `{len(capability_matches.get("registry_matches") or [])}` row(s) in `CAPABILITY_MATCHES.json` (advisory only).
 
 Local model draft: `{model_state}`
 
@@ -650,6 +763,13 @@ def generate(
     fixture_doc, resolved_fixture_path = load_capability_fixture_doc(fixture_path)
     classification = classify_message(message, model_called=use_local_model)
     capability_matches = build_capability_matches(
+        message,
+        rid,
+        classification,
+        model_called=use_local_model,
+    )
+    capability_matches = apply_registry_capability_lookup(
+        capability_matches,
         message,
         rid,
         classification,

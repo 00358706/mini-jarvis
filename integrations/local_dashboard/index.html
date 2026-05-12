@@ -107,6 +107,16 @@
         gap: 8px;
         margin-top: 10px;
       }
+      .runlist {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .runitem {
+        width: 100%;
+        text-align: left;
+        background: rgba(148, 163, 184, 0.1);
+      }
       button {
         border: 1px solid var(--border);
         background: rgba(96, 165, 250, 0.14);
@@ -287,6 +297,15 @@
         </div>
         <pre id="outLabReview"></pre>
         <pre id="outLabArtifact"></pre>
+      </section>
+
+      <section class="card">
+        <h2>7) Recent Lab Runs</h2>
+        <div class="btns">
+          <button id="btnLabRecent" class="secondary">Refresh recent runs</button>
+        </div>
+        <div id="labRecentList" class="runlist"></div>
+        <pre id="outLabRecent"></pre>
       </section>
     </main>
 

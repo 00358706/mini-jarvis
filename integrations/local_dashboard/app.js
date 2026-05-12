@@ -293,6 +293,10 @@ async function loadLabIndex(requestId) {
   return index;
 }
 
+async function loadLabSummary(requestId) {
+  return localTextFetch(`/api/automation-lab/${encodeURIComponent(requestId)}/summary`);
+}
+
 async function onLabGenerate() {
   setOut("outLabGenerate", "");
   setOut("outLabReview", "");
@@ -348,9 +352,7 @@ async function onLabSummary() {
     return;
   }
   try {
-    const summary = await localTextFetch(
-      `/api/automation-lab/${encodeURIComponent(requestId)}/summary`,
-    );
+    const summary = await loadLabSummary(requestId);
     setOut("outLabReview", summary);
   } catch (e) {
     setOut("outLabReview", formatError(e));
@@ -385,6 +387,51 @@ async function onLabViewArtifact() {
   }
 }
 
+async function openRecentLabRun(requestId) {
+  $("labRequestId").value = requestId;
+  setOut("outLabReview", "");
+  setOut("outLabArtifact", "");
+  try {
+    await loadLabIndex(requestId);
+    const summary = await loadLabSummary(requestId);
+    setOut("outLabReview", summary);
+  } catch (e) {
+    setOut("outLabReview", formatError(e));
+  }
+}
+
+function renderRecentRuns(payload) {
+  const list = $("labRecentList");
+  list.innerHTML = "";
+  const runs = Array.isArray(payload?.runs) ? payload.runs : [];
+  for (const run of runs) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "runitem";
+    button.textContent = [
+      run.request_id,
+      run.created_at || "no timestamp",
+      run.proposal_kind || "unknown",
+      run.primary_capability_outcome || "unknown",
+      `artifacts=${run.artifact_count ?? 0}`,
+    ].join(" | ");
+    button.addEventListener("click", () => openRecentLabRun(run.request_id));
+    list.appendChild(button);
+  }
+  const skipped = Array.isArray(payload?.skipped) ? payload.skipped.length : 0;
+  setOut("outLabRecent", `Recent runs: ${runs.length}\nSkipped entries: ${skipped}`);
+}
+
+async function onLabRecent() {
+  setOut("outLabRecent", "");
+  try {
+    const recent = await localJsonFetch("GET", "/api/automation-lab/recent");
+    renderRecentRuns(recent);
+  } catch (e) {
+    setOut("outLabRecent", formatError(e));
+  }
+}
+
 function onSetKey() {
   const v = $("apiKey").value;
   apiKeyMemory = (v ?? "").toString();
@@ -415,6 +462,7 @@ function init() {
   $("btnLabLoadIndex").addEventListener("click", onLabLoadIndex);
   $("btnLabSummary").addEventListener("click", onLabSummary);
   $("btnLabViewArtifact").addEventListener("click", onLabViewArtifact);
+  $("btnLabRecent").addEventListener("click", onLabRecent);
 }
 
 init();

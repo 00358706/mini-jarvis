@@ -127,6 +127,17 @@ try {
     Assert-True ($classification.authority_boundary.tools_executed -eq $false) "CLASSIFICATION.json claims tools executed."
     Assert-True ($classification.authority_boundary.sandbox_worker_invoked -eq $false) "CLASSIFICATION.json claims sandbox worker invoked."
     Assert-True ($capabilities.authority_boundary.registry_modified -eq $false) "CAPABILITY_MATCHES.json claims registry modified."
+    Assert-True ($capabilities.schema_version -eq "automation-lab-capability-matches.v2") "CAPABILITY_MATCHES.json should use v2 schema with registry evidence."
+    Assert-True ($capabilities.registry_lookup.registry_read -eq $true) "CAPABILITY_MATCHES should record registry_read."
+    Assert-True ($capabilities.evidence_sources -contains "registry_readonly") "CAPABILITY_MATCHES should list registry_readonly evidence source."
+    Assert-True (@($capabilities.registry_matches).Count -gt 0) "registry_matches should not be empty."
+    $installedRows = @($capabilities.registry_matches | Where-Object { $_.status -eq "installed" })
+    Assert-True ($installedRows.Count -gt 0) "registry_matches should include installed tool survey rows."
+    $matchKinds = @($capabilities.registry_matches | ForEach-Object { [string]$_.match_kind })
+    Assert-True (
+        ($matchKinds -contains "installed_capability_match") -or
+        ($matchKinds -contains "reuse_extension_candidate")
+    ) "Expected at least one advisory match row (installed or extension candidate) from seeded registry."
 
     Assert-True ($capabilities.missing_capability_behavior.generated_tool_execution_allowed -eq $false) "generated_tool_execution_allowed must be false."
     Assert-True ($toolProposalText -match 'generated_tool_execution_allowed:\s*false') "TOOL_PROPOSAL.md must state generated_tool_execution_allowed: false."
@@ -163,6 +174,10 @@ try {
     foreach ($pattern in $forbiddenPatterns) {
         Assert-True (-not ($generatorSource -match $pattern)) "Generator source references forbidden execution path pattern: $pattern"
     }
+
+    $readerSrc = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot "automation_lab_registry_read.py")
+    Assert-True ($readerSrc -match 'import registry\b') "Registry reader should import registry for read-only queries."
+    Assert-True (-not ($readerSrc -match 'registry\.(propose|approve|install|reject)\s*\(')) "Registry reader must not call registry mutation APIs."
 
     Assert-GuardHashesUnchanged -RepoRoot $RepoRoot -Before $guardBefore
     Write-Host "OK: automation lab proposal artifacts are proposal-only and boundary checks passed."
