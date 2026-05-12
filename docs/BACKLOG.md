@@ -53,9 +53,11 @@ Safe first branch:
 
 **Implemented (narrow):** `scripts/automation_lab_generate_tool_candidate.ps1` emits template-only review artifacts under `data/tool_builds/<request_id>/` after `scripts/automation_lab_create_tool_build.ps1` (see `docs/CURRENT_STATE.md`). This is not install, execution, or registry-backed.
 
+**Implemented (static harness):** `scripts/automation_lab_test_tool_candidate.ps1` writes `TEST_RESULTS.json` and `TEST_SUMMARY.md` under the same build folder using offline checks only; it does not execute or import candidate code. Passing results are review evidence only and do not approve install or execution.
+
 **Current hardening:** candidate generation rejects unsafe build indexes (`authority` must be false, `review_evidence_only` must be true) and restores the original `BUILD_INDEX.json` if generation fails after validation.
 
-**Still later:** the `generated-tool-test-harness` branch may add runnable tests; model-driven refinement remains out of scope for the narrow script above.
+**Still later:** optional executable test harness that runs isolated tests against a reviewed implementation (separate branch/scope from static `static_review` harness).
 
 ### Routine contract later
 
