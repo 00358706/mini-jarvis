@@ -49,6 +49,10 @@ Safe first branch:
 - Update `docs/CURRENT_STATE.md` only for a docs-only design checkpoint.
 - Do not make backlog "current recommended next branch" wording depend on the active branch.
 
+### Tool candidate generation later
+
+After a review-only tool build workspace exists under `data/tool_builds/<request_id>/` (see `scripts/automation_lab_create_tool_build.ps1` and `docs/CURRENT_STATE.md`), a future branch may populate `candidate/` with generated source and add real tests under `tests/`. That work must remain separate from registry install, sandbox execution, and gateway authority.
+
 ### Routine contract later
 
 Problem:
