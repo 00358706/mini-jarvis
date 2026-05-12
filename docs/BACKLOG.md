@@ -51,7 +51,9 @@ Safe first branch:
 
 ### Tool candidate generation later
 
-After a review-only tool build workspace exists under `data/tool_builds/<request_id>/` (see `scripts/automation_lab_create_tool_build.ps1` and `docs/CURRENT_STATE.md`), a future branch may populate `candidate/` with generated source and add real tests under `tests/`. That work must remain separate from registry install, sandbox execution, and gateway authority.
+**Implemented (narrow):** `scripts/automation_lab_generate_tool_candidate.ps1` emits template-only review artifacts under `data/tool_builds/<request_id>/` after `scripts/automation_lab_create_tool_build.ps1` (see `docs/CURRENT_STATE.md`). This is not install, execution, or registry-backed.
+
+**Still later:** the `generated-tool-test-harness` branch may add runnable tests; model-driven refinement remains out of scope for the narrow script above.
 
 ### Routine contract later
 
