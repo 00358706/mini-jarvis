@@ -14,6 +14,10 @@ logs/
 data/*
 !data/plans/
 !data/workspaces/
+!data/registry/
+data/registry/*
+!data/registry/.gitkeep
+!data/registry/generated_installed_tools.json
 
 # Runtime plan JSON (keep optional .gitkeep)
 data/plans/**/*.json
