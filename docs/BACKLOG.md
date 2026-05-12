@@ -61,6 +61,8 @@ Safe first branch:
 
 **Implemented (persistent generated registry metadata):** After install-review packaging, `scripts/automation_lab_install_reviewed_tool.ps1` with explicit phrase `INSTALL_REVIEWED_TOOL` appends metadata to `data/registry/generated_installed_tools.json`; `registry.py` loads those rows at startup. **No** new gateway routes, **no** sandbox/tool execution, **no** `tools.py` dispatch for generated names.
 
+**Implemented (agent-style tool proposal lane, proposal-only):** `scripts/test_agent_tool_proposal_flow.ps1` shows an agent-context Navidrome read-only need entering the Automation Lab `tool_proposal` artifact path via `automation_lab_propose.ps1` only — no install, execution, registry mutation, or dispatch.
+
 **Implemented (generated-tool dry-run, review-only):** `scripts/automation_lab_generated_tool_dry_run.ps1` plus `scripts/generated_tool_dry_run.py` write evidence under `data/generated_tool_dry_runs/<run_id>/` proving registry metadata vs absence of `tools.py` dispatch; no candidate execution, no registry mutation, no sandbox. This is a **safety/review boundary only**, not approval to execute.
 
 **Implemented (offline Navidrome read-only lifecycle example):** `scripts/test_automation_lab_navidrome_readonly_generated_tool_lifecycle_example.ps1` chains the same lifecycle scripts with a synthetic Navidrome read-only proposal text only; **no** real Navidrome traffic, **no** `tools.py` dispatch, **no** runnable Navidrome integration — review/evidence discipline only.
