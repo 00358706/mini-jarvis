@@ -118,3 +118,4 @@ if ($FixturePath -and $FixturePath.Trim()) {
 }
 
 & $Py @ArgsList
+exit $LASTEXITCODE
