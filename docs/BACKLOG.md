@@ -63,6 +63,8 @@ Safe first branch:
 
 **Implemented (generated-tool dry-run, review-only):** `scripts/automation_lab_generated_tool_dry_run.ps1` plus `scripts/generated_tool_dry_run.py` write evidence under `data/generated_tool_dry_runs/<run_id>/` proving registry metadata vs absence of `tools.py` dispatch; no candidate execution, no registry mutation, no sandbox. This is a **safety/review boundary only**, not approval to execute.
 
+**Implemented (offline Navidrome read-only lifecycle example):** `scripts/test_automation_lab_navidrome_readonly_generated_tool_lifecycle_example.ps1` chains the same lifecycle scripts with a synthetic Navidrome read-only proposal text only; **no** real Navidrome traffic, **no** `tools.py` dispatch, **no** runnable Navidrome integration — review/evidence discipline only.
+
 **Still later:** callable wiring for generated tools (dispatch in `tools.py` or equivalent) and any execution path; execution still requires the normal plan/policy/approval/registry/schema/sandbox path.
 
 ### Routine contract later
@@ -325,6 +327,10 @@ Implemented/current slices:
 - `tool-build-workspace`: review-only build workspaces are created under `data/tool_builds/<request_id>/`.
 - `tool-candidate-generation` / `tool-candidate-hardening`: review-only candidate files can be generated under a build workspace, with fail-closed boundary checks and rollback protection.
 - `generated-tool-test-harness`: static/offline harness writes review evidence only (`TEST_RESULTS.json`, `TEST_SUMMARY.md`) and does not import or execute candidate code.
+- `tool-install-review`: install-review packaging writes `INSTALL_MANIFEST.json` / `INSTALL_REVIEW.md` as human review evidence only; it does not install, execute, call sandbox, add dispatch, or add gateway routes.
+- `registry-install-review`: persistent generated registry metadata can be appended only through the explicit `INSTALL_REVIEWED_TOOL` manual confirmation path; install remains metadata-only and is not execution approval.
+- `generated-tool-dry-run`: review-only dry-run evidence proves installed generated metadata against the absence of callable `tools.py` dispatch; it does not import or execute candidate code, call sandbox, mutate registry, or add routes.
+- `navidrome-readonly-tool`: the offline Navidrome read-only lifecycle example exercises the existing build -> candidate -> static harness -> install-review -> manual metadata install -> dry-run flow with synthetic artifacts only; it is not a runnable Navidrome integration.
 
 Remaining focused sequence:
 
@@ -333,27 +339,17 @@ Remaining focused sequence:
    - Purpose: Validate input/output behavior and mocked integration assumptions after static review, before install review.
    - Hard safety rules: Tests must not mutate the real registry, call the sandbox worker, touch real services by default, or convert a passing candidate into an installed tool.
 
-2. `tool-install-review`
-   - Scope: Package the candidate, tests, risk notes, side effects, network access, and proposed registry diff for human review.
-   - Purpose: Make the install decision auditable and separate from candidate generation.
-   - Hard safety rules: The package cannot install itself; approval for implementation is not approval for execution; all side effects and network access remain review items.
+2. `generated-callable-dispatch-gate`
+   - Scope: Add explicit callable wiring for generated tools, if approved, behind normal registry/schema/policy/approval checks.
+   - Purpose: Move from metadata-only generated installs toward tightly controlled execution without granting broad runtime autonomy.
+   - Hard safety rules: No automatic or model-driven dispatch; install is not execution approval; execution must still use the normal plan/policy/approval/registry/schema/sandbox path.
 
-3. `registry-install-review`
-   - Scope: Add a manual/admin-controlled path to install a reviewed candidate from a review package.
-   - Purpose: Convert a tested, reviewed candidate into a real registry entry only after explicit human action.
-   - Hard safety rules: No automatic or model-driven install; registry `status=installed` remains the only execution truth; installed entries must include validated schemas.
+3. `navidrome-runtime-readonly-integration`
+   - Scope: Add a real Navidrome read-only runtime integration only after generated callable dispatch rules exist.
+   - Purpose: Exercise a concrete read-only service integration with explicit environment configuration and no write/download/playback/delete behavior.
+   - Hard safety rules: No playlist edits, downloads, deletes, playback control, or unapproved service calls; any real run must use installed registry status and the normal approved execution path.
 
-4. `generated-tool-dry-run`
-   - Scope: Add a dry-run path for newly installed generated tools through the normal execution controls.
-   - Purpose: Verify sandbox wiring and evidence for generated tools without granting broad runtime autonomy.
-   - Hard safety rules: Dry runs require prior manual install and must go through normal plan, policy, approval, registry, schema, and sandbox checks.
-
-5. `navidrome-readonly-tool`
-   - Scope: Exercise the lifecycle with a low-risk Navidrome read-only generated tool candidate.
-   - Purpose: Prove the reviewed lifecycle on release/new-album lookup behavior before considering broader generated tools.
-   - Hard safety rules: No write or destructive behavior; no automatic install or execution; any real run must use installed registry status and the normal approved execution path.
-
-6. `routine-proposal-runtime`
+4. `routine-proposal-runtime`
     - Scope: Add proposal-only routine runtime behavior that can create review artifacts from routine definitions.
     - Purpose: Connect routines to the generated-tool lifecycle while keeping schedules and adapters as triggers only.
     - Hard safety rules: Routines are workflow definitions, not authority; missing capabilities create proposals only; execution remains limited to the normal plan/policy/approval/registry/schema/sandbox flow.

@@ -206,7 +206,7 @@ $guardBefore = Get-GuardHashes -RepoRoot $RepoRoot
 $toolsPyBefore = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot "tools.py") -Encoding UTF8
 
 $genRegPath = Join-Path $RepoRoot "data\registry\generated_installed_tools.json"
-$genBackup = Get-Content -Raw -LiteralPath $genRegPath -Encoding UTF8
+$genBackupBytes = [System.IO.File]::ReadAllBytes($genRegPath)
 
 $installPs1 = Join-Path $RepoRoot "scripts\automation_lab_install_reviewed_tool.ps1"
 $helperPy = Join-Path $RepoRoot "scripts\registry_append_reviewed_generated_tool.py"
@@ -310,7 +310,7 @@ try {
     Assert-GuardHashesUnchanged -RepoRoot $RepoRoot -Before $guardBefore
     Write-Host "OK: registry install review tests passed."
 } finally {
-    Set-Content -LiteralPath $genRegPath -Value $genBackup -Encoding UTF8
+    [System.IO.File]::WriteAllBytes($genRegPath, $genBackupBytes)
     foreach ($p in @($goodRoot, $dupRoot, $unsafeRoot, $rollRoot)) {
         if ($p -and (Test-Path -LiteralPath $p)) {
             Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue
