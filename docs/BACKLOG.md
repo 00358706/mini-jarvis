@@ -49,9 +49,11 @@ Safe first branch:
 - Update `docs/CURRENT_STATE.md` only for a docs-only design checkpoint.
 - Do not make backlog "current recommended next branch" wording depend on the active branch.
 
-### Tool candidate generation later
+### Tool candidate generation current
 
 **Implemented (narrow):** `scripts/automation_lab_generate_tool_candidate.ps1` emits template-only review artifacts under `data/tool_builds/<request_id>/` after `scripts/automation_lab_create_tool_build.ps1` (see `docs/CURRENT_STATE.md`). This is not install, execution, or registry-backed.
+
+**Current hardening:** candidate generation rejects unsafe build indexes (`authority` must be false, `review_evidence_only` must be true) and restores the original `BUILD_INDEX.json` if generation fails after validation.
 
 **Still later:** the `generated-tool-test-harness` branch may add runnable tests; model-driven refinement remains out of scope for the narrow script above.
 
@@ -309,55 +311,45 @@ Global safety rules:
 - Execution must happen only through the normal plan/policy/approval/registry/schema/sandbox flow.
 - Each branch must stay within its named scope and must not add automatic tool registration, automatic registry installation, model-driven tool installation, generated tool execution, endpoints, MCP tools, or `/ingest` changes.
 
-1. 'capability-registry-lookup
-   - Scope: Add read-only capability lookup against real registry and capability metadata.
-   - Purpose: Replace fixture-only lookup with review evidence that records installed candidates, possible reuse, and gaps.
-   - Hard safety rules: Lookup is advisory only; do not mutate registry files, install tools, execute tools, or let proposals invent `status=installed`.
+Implemented/current slices:
+- `capability-registry-lookup`: read-only registry evidence is included in Automation Lab capability matching. It remains advisory and does not mutate registry state.
+- `capability-match-scoring`: deterministic advisory scoring, precedence, and conflicts are included in `CAPABILITY_MATCHES.json` v3.
+- `tool-build-workspace`: review-only build workspaces are created under `data/tool_builds/<request_id>/`.
+- `tool-candidate-generation` / `tool-candidate-hardening`: review-only candidate files can be generated under a build workspace, with fail-closed boundary checks and rollback protection.
 
-2. `capability-match-scoring`
-   - Scope: Add advisory scoring and ranking for candidate capability matches.
-   - Purpose: Make `reuse_existing`, `extend_existing`, `compose_existing`, `reject_duplicate`, and `propose_new` decisions easier to review.
-   - Hard safety rules: Scores never authorize execution or installation; gateway policy, registry state, schema validation, authorization, and sandbox rules remain decisive.
+Remaining focused sequence:
 
-3. `tool-build-workspace`
-   - Scope: Define a review workspace/artifact layout for generated tool candidates.
-   - Purpose: Keep candidate design notes, source drafts, schemas, risk notes, and test evidence separate from the real registry.
-   - Hard safety rules: Workspace files are evidence only; do not execute generated code, invoke the sandbox worker, or install anything from the workspace.
-
-4. `tool-candidate-generation`
-   - Scope: Generate candidate tool source, schema, and docs into the review workspace.
-   - Purpose: Help humans inspect a possible implementation before any install path exists.
-   - Hard safety rules: Model output remains proposal, not authority; generated files are not registered tools and must not be executed, installed, or applied as patches automatically.
-
-5. `generated-tool-test-harness`
+1. `generated-tool-test-harness`
    - Scope: Add a harness for deterministic tests against generated tool candidates.
    - Purpose: Validate schemas, input/output behavior, mocked integrations, and safety assumptions before install review.
    - Hard safety rules: Tests must not mutate the real registry, call the sandbox worker, touch real services by default, or convert a passing candidate into an installed tool.
 
-6. `tool-install-review`
+2. `tool-install-review`
    - Scope: Package the candidate, tests, risk notes, side effects, network access, and proposed registry diff for human review.
    - Purpose: Make the install decision auditable and separate from candidate generation.
    - Hard safety rules: The package cannot install itself; approval for implementation is not approval for execution; all side effects and network access remain review items.
 
-7. `registry-install-review`
+3. `registry-install-review`
    - Scope: Add a manual/admin-controlled path to install a reviewed candidate from a review package.
    - Purpose: Convert a tested, reviewed candidate into a real registry entry only after explicit human action.
    - Hard safety rules: No automatic or model-driven install; registry `status=installed` remains the only execution truth; installed entries must include validated schemas.
 
-8. `generated-tool-dry-run`
+4. `generated-tool-dry-run`
    - Scope: Add a dry-run path for newly installed generated tools through the normal execution controls.
    - Purpose: Verify sandbox wiring and evidence for generated tools without granting broad runtime autonomy.
    - Hard safety rules: Dry runs require prior manual install and must go through normal plan, policy, approval, registry, schema, and sandbox checks.
 
-9. `navidrome-readonly-tool`
+5. `navidrome-readonly-tool`
    - Scope: Exercise the lifecycle with a low-risk Navidrome read-only generated tool candidate.
    - Purpose: Prove the reviewed lifecycle on release/new-album lookup behavior before considering broader generated tools.
    - Hard safety rules: No write or destructive behavior; no automatic install or execution; any real run must use installed registry status and the normal approved execution path.
 
-10. `routine-proposal-runtime`
+6. `routine-proposal-runtime`
     - Scope: Add proposal-only routine runtime behavior that can create review artifacts from routine definitions.
     - Purpose: Connect routines to the generated-tool lifecycle while keeping schedules and adapters as triggers only.
     - Hard safety rules: Routines are workflow definitions, not authority; missing capabilities create proposals only; execution remains limited to the normal plan/policy/approval/registry/schema/sandbox flow.
+
+OpenClaw-style channel/session/gateway ideas are useful input and session architecture references. In Mini-Jarvis, model workers and agent runtimes may propose, draft, or generate candidate code, but registry, policy, approval, schema validation, and sandbox execution remain enforcement. Workspace/context files are review and planning context, not authority.
 
 ## Medium-term backlog
 

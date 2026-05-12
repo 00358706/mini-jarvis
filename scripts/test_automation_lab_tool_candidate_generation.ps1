@@ -78,7 +78,9 @@ function New-MinimalToolBuildWorkspace {
     param(
         [string]$BuildRoot,
         [string]$BuildId,
-        [bool]$BadBoundary
+        [bool]$BadBoundary,
+        [bool]$Authority = $false,
+        [bool]$ReviewEvidenceOnly = $true
     )
 
     New-Item -ItemType Directory -Path $BuildRoot -Force | Out-Null
@@ -99,8 +101,8 @@ function New-MinimalToolBuildWorkspace {
         schema_version             = "tool-build-index.v1"
         build_id                   = $BuildId
         source_request_id          = $BuildId
-        authority                  = $false
-        review_evidence_only       = $true
+        authority                  = $Authority
+        review_evidence_only       = $ReviewEvidenceOnly
         generated_code_present     = $false
         install_allowed            = $installAllowed
         execution_allowed          = $executionAllowed
@@ -146,6 +148,10 @@ Assert-True ($genSrc -notmatch '(?i)\bpython(\.exe)?\s') "Generator must not inv
 Assert-True ($genSrc -notmatch '(?i)automation_lab\.py') "Generator must not invoke automation_lab.py."
 Assert-True ($genSrc -notmatch '(?i)from\s+registry\b') "Generator must not import registry."
 Assert-True ($genSrc -notmatch '(?i)from\s+sandbox\b') "Generator must not import sandbox."
+Assert-True ($genSrc -match "authority must be false") "Generator must reject authority=true inputs."
+Assert-True ($genSrc -match "review_evidence_only must be true") "Generator must reject non-review inputs."
+Assert-True ($genSrc -match '\$originalIndexRaw\s*=\s*Get-Content -Raw -LiteralPath \$indexPath') "Generator must capture original BUILD_INDEX.json before mutation."
+Assert-True ($genSrc -match 'Set-Content -LiteralPath \$indexPath -Value \$originalIndexRaw') "Generator must restore original BUILD_INDEX.json in catch."
 
 $buildsRoot = Join-Path $RepoRoot "data\tool_builds"
 if (-not (Test-Path -LiteralPath $buildsRoot)) {
@@ -154,8 +160,14 @@ if (-not (Test-Path -LiteralPath $buildsRoot)) {
 
 $positiveId = "tb_cand_$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
 $badBoundaryId = "tb_cand_bad_$([Guid]::NewGuid().ToString('N').Substring(0, 10))"
+$badAuthorityId = "tb_cand_auth_$([Guid]::NewGuid().ToString('N').Substring(0, 9))"
+$badReviewId = "tb_cand_rev_$([Guid]::NewGuid().ToString('N').Substring(0, 10))"
+$rollbackId = "tb_cand_rb_$([Guid]::NewGuid().ToString('N').Substring(0, 11))"
 $positiveRoot = Join-Path $buildsRoot $positiveId
 $badBoundaryRoot = Join-Path $buildsRoot $badBoundaryId
+$badAuthorityRoot = Join-Path $buildsRoot $badAuthorityId
+$badReviewRoot = Join-Path $buildsRoot $badReviewId
+$rollbackRoot = Join-Path $buildsRoot $rollbackId
 
 try {
     New-MinimalToolBuildWorkspace -BuildRoot $positiveRoot -BuildId $positiveId -BadBoundary $false
@@ -204,6 +216,35 @@ try {
     Assert-True ($rBad.Code -ne 0) "Must reject when install/execution flags are not false."
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $badBoundaryRoot "candidate\CANDIDATE_TOOL.py"))) "No candidate files on boundary failure."
 
+    # Unsafe authority flags
+    New-MinimalToolBuildWorkspace -BuildRoot $badAuthorityRoot -BuildId $badAuthorityId -BadBoundary $false -Authority $true
+    $rAuth = Invoke-CandidateGenerator -ScriptPath $genPath -ToolBuildId $badAuthorityId
+    Assert-True ($rAuth.Code -ne 0) "Must reject when authority is true."
+    Assert-True ($rAuth.Output -match "authority must be false") "Expected authority rejection message."
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $badAuthorityRoot "candidate\CANDIDATE_TOOL.py"))) "No candidate files on authority failure."
+
+    New-MinimalToolBuildWorkspace -BuildRoot $badReviewRoot -BuildId $badReviewId -BadBoundary $false -ReviewEvidenceOnly $false
+    $rReview = Invoke-CandidateGenerator -ScriptPath $genPath -ToolBuildId $badReviewId
+    Assert-True ($rReview.Code -ne 0) "Must reject when review_evidence_only is false."
+    Assert-True ($rReview.Output -match "review_evidence_only must be true") "Expected review_evidence_only rejection message."
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $badReviewRoot "candidate\CANDIDATE_TOOL.py"))) "No candidate files on review_evidence_only failure."
+
+    # Rollback on post-validation filesystem failure
+    New-MinimalToolBuildWorkspace -BuildRoot $rollbackRoot -BuildId $rollbackId -BadBoundary $false
+    $rollbackIndex = Join-Path $rollbackRoot "BUILD_INDEX.json"
+    $rollbackOriginal = Get-Content -Raw -LiteralPath $rollbackIndex -Encoding UTF8
+    try {
+        Set-ItemProperty -LiteralPath $rollbackIndex -Name IsReadOnly -Value $true
+        $rRollback = Invoke-CandidateGenerator -ScriptPath $genPath -ToolBuildId $rollbackId
+    } finally {
+        Set-ItemProperty -LiteralPath $rollbackIndex -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+    }
+    Assert-True ($rRollback.Code -ne 0) "Read-only BUILD_INDEX.json should force post-validation failure."
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $rollbackRoot "candidate\CANDIDATE_TOOL.py"))) "Rollback must remove candidate output after failure."
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $rollbackRoot "tests\TEST_PLAN.md"))) "Rollback must remove test plan after failure."
+    $rollbackAfter = Get-Content -Raw -LiteralPath $rollbackIndex -Encoding UTF8
+    Assert-True ($rollbackAfter -eq $rollbackOriginal) "Rollback must leave original BUILD_INDEX.json content intact."
+
     # Missing workspace
     $ghostId = "tb_cand_xx_$([Guid]::NewGuid().ToString('N').Substring(0, 10))"
     $rGhost = Invoke-CandidateGenerator -ScriptPath $genPath -ToolBuildId $ghostId
@@ -223,7 +264,11 @@ try {
     Assert-GuardHashesUnchanged -RepoRoot $RepoRoot -Before $guardBefore
     Write-Host "OK: tool candidate generation tests passed."
 } finally {
-    foreach ($p in @($positiveRoot, $badBoundaryRoot)) {
+    foreach ($p in @($positiveRoot, $badBoundaryRoot, $badAuthorityRoot, $badReviewRoot, $rollbackRoot)) {
+        $idx = Join-Path $p "BUILD_INDEX.json"
+        if ($idx -and (Test-Path -LiteralPath $idx)) {
+            Set-ItemProperty -LiteralPath $idx -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+        }
         if ($p -and (Test-Path -LiteralPath $p)) {
             Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue
         }
