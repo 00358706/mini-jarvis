@@ -96,6 +96,20 @@ function Assert-RegistryReaderImportsReadOnly {
     }
 }
 
+function Assert-ScoringModuleSafe {
+    param([string]$Path)
+
+    $source = Get-Content -Raw -LiteralPath $Path
+    foreach ($pattern in @(
+        '(?m)^\s*import\s+registry\b',
+        '(?m)^\s*from\s+registry\b',
+        'registry\.(propose|approve|install|reject)\s*\(',
+        'sandbox\.run\s*\('
+    )) {
+        Assert-True (-not ($source -match $pattern)) "Scoring module must stay registry/sandbox-free: $pattern"
+    }
+}
+
 function Assert-IndexMatchesOutput {
     param(
         [string]$OutputDir,
@@ -120,6 +134,7 @@ function Assert-IndexMatchesOutput {
     Assert-True ($index.registry_capability_lookup.registry_read -eq $true) "Registry read must be recorded as true."
     Assert-True ($null -ne $index.registry_capability_lookup.tools_inspected_count) "tools_inspected_count should be present."
     Assert-True ([int]$index.registry_capability_lookup.tools_inspected_count -gt 0) "tools_inspected_count should be positive."
+    Assert-True ($null -ne $index.registry_capability_lookup.conflicts_count) "INDEX.json should surface capability scoring conflicts_count."
 
     $actualFiles = @(Get-ChildItem -LiteralPath $OutputDir -File | Select-Object -ExpandProperty Name | Sort-Object)
     $listedFiles = @($index.artifacts | ForEach-Object { [string]$_.filename } | Sort-Object)
@@ -260,6 +275,7 @@ try {
     Assert-NoForbiddenImports -Path (Join-Path $RepoRoot "automation_lab.py")
     Assert-NoForbiddenImports -Path (Join-Path $RepoRoot "local_model_adapter.py")
     Assert-RegistryReaderImportsReadOnly -Path (Join-Path $RepoRoot "automation_lab_registry_read.py")
+    Assert-ScoringModuleSafe -Path (Join-Path $RepoRoot "automation_lab_capability_scoring.py")
     Assert-GuardHashesUnchanged -RepoRoot $RepoRoot -Before $guardBefore
     Write-Host "OK: automation lab INDEX.json records review artifacts without authority."
 } finally {

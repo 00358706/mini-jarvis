@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from automation_lab_capability_scoring import finalize_capability_scoring
 from automation_lab_registry_read import perform_registry_capability_lookup
 
 
@@ -220,6 +221,10 @@ def build_capability_matches(
         "candidate_tools": candidate_tools,
         "capability_ids": [capability_id_for(message, classification)],
         "lookup_notes": lookup_notes,
+        "deterministic_layer": {
+            "recommended_outcome": primary_outcome,
+            "lookup_notes": lookup_notes,
+        },
         "missing_capability_behavior": {
             "action": missing_action,
             "generated_tool_execution_allowed": False,
@@ -310,7 +315,6 @@ def apply_registry_capability_lookup(
 ) -> dict[str, Any]:
     payload = perform_registry_capability_lookup(message, classification)
     out = dict(capability_matches)
-    out["schema_version"] = "automation-lab-capability-matches.v2"
     out["request_id"] = request_id
     out["registry_lookup"] = payload["registry_lookup"]
     out["registry_matches"] = payload["registry_matches"]
@@ -318,7 +322,6 @@ def apply_registry_capability_lookup(
     if payload["registry_lookup"].get("registry_read"):
         sources.append("registry_readonly")
     out["evidence_sources"] = sources
-    out["primary_outcome_source"] = "deterministic_template"
 
     sug = payload["suggested_primary_outcome"]
     out["candidate_tools"] = merge_tool_candidates(
@@ -326,24 +329,12 @@ def apply_registry_capability_lookup(
         payload["suggested_candidate_tools"],
     )
     extra_note = payload["suggested_lookup_notes"]
-    if sug:
-        out["primary_outcome"] = sug
-        out["primary_outcome_source"] = "registry_metadata"
-        out["outcomes_considered"] = build_outcomes_considered(
-            sug,
-            classification["proposal_kind"],
-            selected_note=(
-                "Primary outcome influenced by read-only registry tool metadata scoring (advisory)."
-            ),
-        )
-        out["lookup_notes"] = extra_note
-        out["missing_capability_behavior"] = {
-            "action": missing_action_for_outcome(sug, classification["proposal_kind"]),
-            "generated_tool_execution_allowed": False,
-        }
-    else:
-        prev = out.get("lookup_notes") or ""
-        out["lookup_notes"] = (prev + " " + extra_note).strip()
+    prev = out.get("lookup_notes") or ""
+    out["lookup_notes"] = (prev + " " + extra_note).strip()
+    out["registry_layer"] = {
+        "recommended_outcome": sug,
+        "suggested_lookup_notes": extra_note,
+    }
 
     out["source"] = "+".join(out["evidence_sources"])
     out["authority_boundary"] = authority_boundary(model_called=model_called)
@@ -451,9 +442,9 @@ def apply_capability_fixture_lookup(
         return updated
 
     fixture, matched_terms = fixture_match
-    primary_outcome = str(fixture["primary_outcome"])
-    if primary_outcome not in ALLOWED_CAPABILITY_OUTCOMES:
-        raise ValueError(f"Fixture outcome is not allowed: {primary_outcome}")
+    fixture_primary = str(fixture["primary_outcome"])
+    if fixture_primary not in ALLOWED_CAPABILITY_OUTCOMES:
+        raise ValueError(f"Fixture outcome is not allowed: {fixture_primary}")
 
     fixture_id = str(fixture.get("fixture_id", "unnamed_fixture"))
     lookup_notes = str(
@@ -481,28 +472,17 @@ def apply_capability_fixture_lookup(
             "request_id": request_id,
             "evidence_sources": es,
             "source": "+".join(es) + f"+fixture:{fixture_id}",
-            "primary_outcome": primary_outcome,
-            "primary_outcome_source": "static_fixture",
-            "outcomes_considered": build_outcomes_considered(
-                primary_outcome,
-                classification["proposal_kind"],
-                selected_note=(
-                    f"Primary outcome selected by optional static fixture `{fixture_id}`; "
-                    "`registry_matches` remains registry evidence for the same request."
-                ),
-            ),
             "candidate_tools": merged_candidates,
             "capability_ids": fixture.get(
                 "capability_ids",
                 [capability_id_for(message, classification)],
             ),
             "lookup_notes": lookup_notes,
-            "missing_capability_behavior": {
-                "action": missing_action_for_outcome(
-                    primary_outcome,
-                    classification["proposal_kind"],
-                ),
-                "generated_tool_execution_allowed": False,
+            "fixture_layer": {
+                "recommended_outcome": fixture_primary,
+                "fixture_id": fixture_id,
+                "lookup_notes": lookup_notes,
+                "matched_terms": list(matched_terms),
             },
             "authority_boundary": authority_boundary(model_called=model_called),
         }
@@ -570,6 +550,9 @@ def build_artifact_index(
             ),
             "primary_outcome_source": capability_matches.get("primary_outcome_source"),
             "evidence_sources": capability_matches.get("evidence_sources"),
+            "capability_match_score": capability_matches.get("score"),
+            "precedence_applied": capability_matches.get("precedence_applied"),
+            "conflicts_count": len(capability_matches.get("conflicts") or []),
         },
         "authority": False,
         "authority_boundary": boundary,
@@ -608,6 +591,12 @@ Classification: `{classification["proposal_kind"]}`
 Primary capability outcome: `{capability_matches["primary_outcome"]}`
 
 Primary outcome source: `{capability_matches.get("primary_outcome_source", "unknown")}`
+
+Advisory match score: `{capability_matches.get("score", "n/a")}` (see `score_breakdown` in `CAPABILITY_MATCHES.json`)
+
+Precedence applied: `{capability_matches.get("precedence_applied", "n/a")}`
+
+Conflicts recorded: `{len(capability_matches.get("conflicts") or [])}` (advisory only)
 
 Capability evidence sources: `{", ".join(capability_matches.get("evidence_sources") or [])}`
 
@@ -783,6 +772,11 @@ def generate(
         fixture_doc,
         resolved_fixture_path,
         model_called=use_local_model,
+    )
+    capability_matches = finalize_capability_scoring(
+        capability_matches,
+        classification,
+        message,
     )
     boundary = authority_boundary(model_called=use_local_model)
 

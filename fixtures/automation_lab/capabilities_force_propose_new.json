@@ -1,0 +1,26 @@
+{
+  "schema_version": "automation-lab-capability-fixtures.v1",
+  "description": "Advisory fixture that forces propose_new to test registry-vs-fixture precedence (conflict reporting).",
+  "authority_boundary": {
+    "advisory_only": true,
+    "registry_read": false,
+    "registry_modified": false
+  },
+  "fixtures": [
+    {
+      "fixture_id": "force_propose_new_for_search_repo",
+      "match_any": [
+        "search_repo",
+        "repository",
+        "grep",
+        "yaml"
+      ],
+      "primary_outcome": "propose_new",
+      "capability_ids": [
+        "conflict.test.search_repo_netnew"
+      ],
+      "candidate_tools": [],
+      "lookup_notes": "Intentional propose_new to exercise registry strong-installed override and conflict reporting."
+    }
+  ]
+}

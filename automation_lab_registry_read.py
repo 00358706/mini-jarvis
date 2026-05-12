@@ -159,10 +159,17 @@ def perform_registry_capability_lookup(
             scored.append((s, t, reasons))
     scored.sort(key=lambda x: (-x[0], x[1].name))
 
+    if "radarr" in message.lower():
+        seen_n = {t.name for _, t, _ in scored}
+        for t in tools:
+            if "radarr" in t.name.lower() and t.name not in seen_n:
+                scored.append((0.2, t, ["boost:radarr_token_in_message"]))
+        scored.sort(key=lambda x: (-x[0], x[1].name))
+
     ranked_names = [t.name for _, t, _ in scored[:12]]
 
     registry_matches: list[dict[str, Any]] = []
-    for _rank, (s, tool, reasons) in enumerate(scored[:12]):
+    for _rank, (s, tool, reasons) in enumerate(scored[:20]):
         kind = "no_registry_match"
         if tool.status == "installed":
             if s >= 0.42:
