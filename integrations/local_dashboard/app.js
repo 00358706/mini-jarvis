@@ -17,6 +17,7 @@ function pretty(obj) {
 }
 
 let apiKeyMemory = "";
+let automationLabIndex = null;
 
 function conn() {
   const baseUrl = $("baseUrl").value.trim() || "http://127.0.0.1:8000";
@@ -58,6 +59,45 @@ async function apiFetch(method, path, body) {
     throw err;
   }
   return json;
+}
+
+async function localJsonFetch(method, path, body) {
+  const resp = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await resp.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+
+  if (!resp.ok) {
+    const err = new Error(`HTTP ${resp.status} ${resp.statusText || ""}`.trim());
+    err.response = json;
+    throw err;
+  }
+  return json;
+}
+
+async function localTextFetch(path) {
+  const resp = await fetch(path, { method: "GET" });
+  const text = await resp.text();
+  if (!resp.ok) {
+    const err = new Error(`HTTP ${resp.status} ${resp.statusText || ""}`.trim());
+    try {
+      err.response = JSON.parse(text);
+    } catch {
+      err.response = { raw: text };
+    }
+    throw err;
+  }
+  return text;
 }
 
 function setOut(id, value) {
@@ -231,6 +271,120 @@ async function onReject() {
   }
 }
 
+function populateLabArtifacts(index) {
+  automationLabIndex = index;
+  const select = $("labArtifact");
+  select.innerHTML = "";
+  const artifacts = Array.isArray(index?.artifacts) ? index.artifacts : [];
+  for (const artifact of artifacts) {
+    const option = document.createElement("option");
+    option.value = artifact.filename;
+    option.textContent = `${artifact.filename} (${artifact.kind})`;
+    select.appendChild(option);
+  }
+}
+
+async function loadLabIndex(requestId) {
+  const index = await localJsonFetch(
+    "GET",
+    `/api/automation-lab/${encodeURIComponent(requestId)}/index`,
+  );
+  populateLabArtifacts(index);
+  return index;
+}
+
+async function onLabGenerate() {
+  setOut("outLabGenerate", "");
+  setOut("outLabReview", "");
+  setOut("outLabArtifact", "");
+  try {
+    const body = {
+      message: $("labMessage").value.trim() || "Create a tool to list new Navidrome releases",
+      use_fixture: $("labUseFixture").checked,
+    };
+    const response = await localJsonFetch("POST", "/api/automation-lab/generate", body);
+    const result = response?.result || {};
+    if (result.request_id) $("labRequestId").value = result.request_id;
+    if (response?.index) populateLabArtifacts(response.index);
+    setOut(
+      "outLabGenerate",
+      [
+        `request_id: ${result.request_id || "(none)"}`,
+        `output_dir: ${result.output_dir || "(none)"}`,
+        `primary_capability_outcome: ${result.primary_capability_outcome || "(none)"}`,
+        "",
+        "Artifacts:",
+        ...(Array.isArray(result.artifacts) ? result.artifacts.map((name) => `- ${name}`) : []),
+      ].join("\n"),
+    );
+    if (response?.review_summary) {
+      setOut("outLabReview", response.review_summary);
+    }
+  } catch (e) {
+    setOut("outLabGenerate", formatError(e));
+  }
+}
+
+async function onLabLoadIndex() {
+  setOut("outLabReview", "");
+  const requestId = $("labRequestId").value.trim();
+  if (!requestId) {
+    setOut("outLabReview", "request_id is required");
+    return;
+  }
+  try {
+    const index = await loadLabIndex(requestId);
+    setOut("outLabReview", pretty(index));
+  } catch (e) {
+    setOut("outLabReview", formatError(e));
+  }
+}
+
+async function onLabSummary() {
+  setOut("outLabReview", "");
+  const requestId = $("labRequestId").value.trim();
+  if (!requestId) {
+    setOut("outLabReview", "request_id is required");
+    return;
+  }
+  try {
+    const summary = await localTextFetch(
+      `/api/automation-lab/${encodeURIComponent(requestId)}/summary`,
+    );
+    setOut("outLabReview", summary);
+  } catch (e) {
+    setOut("outLabReview", formatError(e));
+  }
+}
+
+async function onLabViewArtifact() {
+  setOut("outLabArtifact", "");
+  const requestId = $("labRequestId").value.trim();
+  if (!requestId) {
+    setOut("outLabArtifact", "request_id is required");
+    return;
+  }
+  try {
+    if (!automationLabIndex) {
+      await loadLabIndex(requestId);
+    }
+    const filename = $("labArtifact").value;
+    if (!filename) {
+      setOut("outLabArtifact", "Select an indexed artifact first.");
+      return;
+    }
+    const artifact = await localJsonFetch(
+      "GET",
+      `/api/automation-lab/${encodeURIComponent(requestId)}/artifacts/${encodeURIComponent(
+        filename,
+      )}`,
+    );
+    setOut("outLabArtifact", `${artifact.filename}\n\n${capText(artifact.content, 6000)}`);
+  } catch (e) {
+    setOut("outLabArtifact", formatError(e));
+  }
+}
+
 function onSetKey() {
   const v = $("apiKey").value;
   apiKeyMemory = (v ?? "").toString();
@@ -245,6 +399,7 @@ function onSetKey() {
 function init() {
   $("baseUrl").value = "http://127.0.0.1:8000";
   $("message").value = "list project files";
+  $("labMessage").value = "Create a tool to list new Navidrome releases";
 
   $("btnSetKey").addEventListener("click", onSetKey);
   $("btnHealth").addEventListener("click", onHealth);
@@ -256,6 +411,10 @@ function init() {
   $("btnApprove").addEventListener("click", onApprove);
   $("btnExecute").addEventListener("click", onExecute);
   $("btnReject").addEventListener("click", onReject);
+  $("btnLabGenerate").addEventListener("click", onLabGenerate);
+  $("btnLabLoadIndex").addEventListener("click", onLabLoadIndex);
+  $("btnLabSummary").addEventListener("click", onLabSummary);
+  $("btnLabViewArtifact").addEventListener("click", onLabViewArtifact);
 }
 
 init();

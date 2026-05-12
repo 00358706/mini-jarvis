@@ -46,6 +46,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\automation_lab_review.ps1 -Re
 
 The review command also accepts `-Path` pointing to either a run directory or its `INDEX.json`. It reads `INDEX.json` only, prints a compact review summary, and does not modify artifacts, call local models, approve/authorize plans, execute tools, or touch the registry.
 
+The local dashboard includes a narrow **Automation Lab** view. Its local server can generate proposal artifacts, read `INDEX.json` or the compact review summary, and read only artifacts listed in that run's index. The dashboard view remains client/review-only and has no approve, execute, install, registry mutation, sandbox, or model-call controls.
+
 ## Artifacts
 
 Each run writes:

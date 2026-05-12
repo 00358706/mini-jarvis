@@ -90,6 +90,17 @@
         grid-template-columns: 1fr 1fr;
         gap: 10px;
       }
+      .checkrow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .checkrow input {
+        width: auto;
+      }
       .btns {
         display: flex;
         flex-wrap: wrap;
@@ -242,6 +253,40 @@
           <button id="btnReject" class="danger">Reject (explicit click)</button>
         </div>
         <pre id="outLifecycle"></pre>
+      </section>
+
+      <section class="card">
+        <h2>5) Automation Lab</h2>
+        <label for="labMessage">Message</label>
+        <textarea
+          id="labMessage"
+          placeholder="Create a tool to list new Navidrome releases"
+        ></textarea>
+        <label class="checkrow" for="labUseFixture">
+          <input id="labUseFixture" type="checkbox" />
+          Use static capability fixture lookup
+        </label>
+        <div class="btns">
+          <button id="btnLabGenerate">Generate proposal artifacts</button>
+        </div>
+        <pre id="outLabGenerate"></pre>
+      </section>
+
+      <section class="card">
+        <h2>6) Automation Lab Review</h2>
+        <label for="labRequestId">Request id</label>
+        <input id="labRequestId" placeholder="auto_lab_..." />
+        <div class="btns">
+          <button id="btnLabLoadIndex" class="secondary">Load INDEX.json</button>
+          <button id="btnLabSummary" class="secondary">Compact summary</button>
+        </div>
+        <label for="labArtifact">Artifact</label>
+        <select id="labArtifact"></select>
+        <div class="btns">
+          <button id="btnLabViewArtifact" class="secondary">View artifact</button>
+        </div>
+        <pre id="outLabReview"></pre>
+        <pre id="outLabArtifact"></pre>
       </section>
     </main>
 

@@ -11,6 +11,7 @@ Tiny local review dashboard to demonstrate that a non–Open WebUI UI can operat
 - Not an execution authority.
 - Not a tool runner.
 - Not a gateway extension (no new endpoints in the gateway).
+- Not an automation lab authority; automation lab artifacts remain review evidence only.
 
 ### Run it
 Prereqs:
@@ -35,6 +36,7 @@ In the UI:
 5. Approve via `POST /plans/<plan_id>/approve` (explicit click).
 6. Execute via `POST /plans/<plan_id>/execute` (separate explicit click).
 7. Show completed compact + capped RESULT.md preview.
+8. Use **Automation Lab** to generate proposal-only review artifacts, inspect `INDEX.json`, and read indexed artifacts only.
 
 ### Manual safe-flow checklist
 - **Client-only**: the dashboard must only call gateway HTTP endpoints.
@@ -75,3 +77,10 @@ The dashboard uses only these gateway endpoints:
 - `GET /workspaces/completed/<plan_id>/compact`
 - `GET /workspaces/completed/<plan_id>/files/RESULT.md`
 
+The dashboard also exposes narrow local automation lab review routes on the dashboard server only:
+- `POST /api/automation-lab/generate`
+- `GET /api/automation-lab/<request_id>/index`
+- `GET /api/automation-lab/<request_id>/summary`
+- `GET /api/automation-lab/<request_id>/artifacts/<filename>`
+
+Automation lab artifact reads are constrained to filenames listed in that run's `INDEX.json`.
