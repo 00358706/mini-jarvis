@@ -318,12 +318,13 @@ Implemented/current slices:
 - `capability-match-scoring`: deterministic advisory scoring, precedence, and conflicts are included in `CAPABILITY_MATCHES.json` v3.
 - `tool-build-workspace`: review-only build workspaces are created under `data/tool_builds/<request_id>/`.
 - `tool-candidate-generation` / `tool-candidate-hardening`: review-only candidate files can be generated under a build workspace, with fail-closed boundary checks and rollback protection.
+- `generated-tool-test-harness`: static/offline harness writes review evidence only (`TEST_RESULTS.json`, `TEST_SUMMARY.md`) and does not import or execute candidate code.
 
 Remaining focused sequence:
 
-1. `generated-tool-test-harness`
-   - Scope: Add a harness for deterministic tests against generated tool candidates.
-   - Purpose: Validate schemas, input/output behavior, mocked integrations, and safety assumptions before install review.
+1. `executable-isolated-candidate-test-harness`
+   - Scope: Add a future harness for mocked executable tests against reviewed generated tool candidates.
+   - Purpose: Validate input/output behavior and mocked integration assumptions after static review, before install review.
    - Hard safety rules: Tests must not mutate the real registry, call the sandbox worker, touch real services by default, or convert a passing candidate into an installed tool.
 
 2. `tool-install-review`
