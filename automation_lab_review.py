@@ -93,6 +93,9 @@ def validate_index_payload(payload: dict[str, Any]) -> None:
         raise ValueError("INDEX.json local_model must be an object.")
     if not isinstance(payload["fixture_lookup"], dict):
         raise ValueError("INDEX.json fixture_lookup must be an object.")
+    reg = payload.get("registry_capability_lookup")
+    if reg is not None and not isinstance(reg, dict):
+        raise ValueError("INDEX.json registry_capability_lookup must be an object when present.")
     if not isinstance(payload["authority_boundary"], dict):
         raise ValueError("INDEX.json authority_boundary must be an object.")
     if not isinstance(payload["artifacts"], list):
@@ -119,10 +122,27 @@ def recommended_review_order(artifact_names: set[str]) -> list[str]:
 def render_summary(index: dict[str, Any], index_path: Path) -> str:
     local_model = index["local_model"]
     fixture_lookup = index["fixture_lookup"]
+    reg = index.get("registry_capability_lookup") or {}
     boundary = index["authority_boundary"]
     artifacts = index["artifacts"]
     artifact_names = {str(entry["filename"]) for entry in artifacts}
     all_artifacts_non_authority = all(entry.get("authority") is False for entry in artifacts)
+
+    es = reg.get("evidence_sources")
+    if isinstance(es, list):
+        es_txt = ",".join(str(x) for x in es)
+    elif es is None:
+        es_txt = ""
+    else:
+        es_txt = str(es)
+    reg_line = (
+        "registry_capability_index: "
+        f"enabled={bool_text(reg.get('enabled'))}, "
+        f"registry_read={bool_text(reg.get('registry_read'))}, "
+        f"tools_inspected_count={reg.get('tools_inspected_count')}, "
+        f"primary_outcome_source={reg.get('primary_outcome_source')}, "
+        f"evidence_sources={es_txt}"
+    )
 
     lines = [
         "Automation Lab Review Summary",
@@ -137,6 +157,7 @@ def render_summary(index: dict[str, Any], index_path: Path) -> str:
         "fixture_lookup: "
         f"enabled={bool_text(fixture_lookup.get('enabled'))}, "
         f"source={fixture_lookup.get('source')}",
+        reg_line,
         "",
         f"Artifacts ({len(artifacts)}):",
     ]

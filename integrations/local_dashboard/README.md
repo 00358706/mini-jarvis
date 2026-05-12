@@ -36,7 +36,7 @@ In the UI:
 5. Approve via `POST /plans/<plan_id>/approve` (explicit click).
 6. Execute via `POST /plans/<plan_id>/execute` (separate explicit click).
 7. Show completed compact + capped RESULT.md preview.
-8. Use **Automation Lab** to generate proposal-only review artifacts, inspect `INDEX.json`, and read indexed artifacts only.
+8. Use **Automation Lab** to generate proposal-only review artifacts, inspect `INDEX.json`, read indexed artifacts only, and load recent indexed runs.
 
 ### Manual safe-flow checklist
 - **Client-only**: the dashboard must only call gateway HTTP endpoints.
@@ -79,8 +79,10 @@ The dashboard uses only these gateway endpoints:
 
 The dashboard also exposes narrow local automation lab review routes on the dashboard server only:
 - `POST /api/automation-lab/generate`
+- `GET /api/automation-lab/recent`
 - `GET /api/automation-lab/<request_id>/index`
 - `GET /api/automation-lab/<request_id>/summary`
 - `GET /api/automation-lab/<request_id>/artifacts/<filename>`
 
 Automation lab artifact reads are constrained to filenames listed in that run's `INDEX.json`.
+Recent runs are derived from `data/automation_lab/<request_id>/INDEX.json` only.

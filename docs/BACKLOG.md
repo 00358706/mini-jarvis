@@ -144,20 +144,37 @@ Rules:
 - Do not expose approve/reject/execute as MCP tools.
 - Do not expose sandbox/tool execution through MCP.
 
-### Workspace cleanup later
+### Workspace retention and compaction later
 
 Problem:
-Smoke tests and experiments create many active/completed/rejected workspaces.
+Smoke tests, proposal flows, and review mirrors create many workspace folders. Over time, `data/workspaces/` can become larger than the codebase because it stores redundant copies of plan, policy, result, and review artifacts.
 
-Safe first step:
-- Add read-only workspace archive candidates.
-- Show old workspaces by state and age.
+Goal:
+Keep workspaces useful for human review while preventing unbounded storage growth.
+
+Design:
+- Add a read-only workspace storage report.
+- Show size by state, age, and largest folders.
+- Identify archive candidates without mutating anything.
+- Compact old completed/rejected workspaces into archive folders or zip bundles.
+- Preserve `WORKSPACE_SUMMARY.md`, `INDEX.json`, hashes, and audit references.
+- Keep active workspaces untouched.
+- Treat test-generated workspaces separately.
 
 Rules:
 - No deletion by default.
-- Prefer archive/move over delete.
+- Prefer archive/compact over delete.
 - Require explicit confirmation for any mutation.
-- Keep audit trail.
+- Never archive active workspaces automatically.
+- Keep enough evidence to answer what happened, when, and why.
+- Workspace files remain review evidence, not authority.
+- Gateway, plan state, registry, policy, approvals, sandbox, and audit remain the authority path.
+
+Suggested branch sequence:
+1. `workspace-storage-report`
+2. `workspace-archive-candidates`
+3. `workspace-compact-archive`
+4. `test-workspace-retention`
 
 ### Action assurance / structured evidence later
 
@@ -273,6 +290,68 @@ Rules:
 Safe first step:
 - Add capability metadata fields to the future tool proposal / registry design.
 - Do not change runtime execution behavior in the first pass.
+
+### Generated tool lifecycle roadmap later
+
+This roadmap is a branch sequence for moving from advisory automation lab artifacts toward a reviewed generated-tool lifecycle. It is backlog guidance only, not approval to execute, register, install, or run generated tools.
+
+Global safety rules:
+- Model output is proposal, not authority.
+- Automation lab artifacts are review evidence only.
+- Registry `status=installed` remains execution truth.
+- Generated tools must be tested and reviewed before install.
+- Execution must happen only through the normal plan/policy/approval/registry/schema/sandbox flow.
+- Each branch must stay within its named scope and must not add automatic tool registration, automatic registry installation, model-driven tool installation, generated tool execution, endpoints, MCP tools, or `/ingest` changes.
+
+1. 'capability-registry-lookup
+   - Scope: Add read-only capability lookup against real registry and capability metadata.
+   - Purpose: Replace fixture-only lookup with review evidence that records installed candidates, possible reuse, and gaps.
+   - Hard safety rules: Lookup is advisory only; do not mutate registry files, install tools, execute tools, or let proposals invent `status=installed`.
+
+2. `capability-match-scoring`
+   - Scope: Add advisory scoring and ranking for candidate capability matches.
+   - Purpose: Make `reuse_existing`, `extend_existing`, `compose_existing`, `reject_duplicate`, and `propose_new` decisions easier to review.
+   - Hard safety rules: Scores never authorize execution or installation; gateway policy, registry state, schema validation, authorization, and sandbox rules remain decisive.
+
+3. `tool-build-workspace`
+   - Scope: Define a review workspace/artifact layout for generated tool candidates.
+   - Purpose: Keep candidate design notes, source drafts, schemas, risk notes, and test evidence separate from the real registry.
+   - Hard safety rules: Workspace files are evidence only; do not execute generated code, invoke the sandbox worker, or install anything from the workspace.
+
+4. `tool-candidate-generation`
+   - Scope: Generate candidate tool source, schema, and docs into the review workspace.
+   - Purpose: Help humans inspect a possible implementation before any install path exists.
+   - Hard safety rules: Model output remains proposal, not authority; generated files are not registered tools and must not be executed, installed, or applied as patches automatically.
+
+5. `generated-tool-test-harness`
+   - Scope: Add a harness for deterministic tests against generated tool candidates.
+   - Purpose: Validate schemas, input/output behavior, mocked integrations, and safety assumptions before install review.
+   - Hard safety rules: Tests must not mutate the real registry, call the sandbox worker, touch real services by default, or convert a passing candidate into an installed tool.
+
+6. `tool-install-review`
+   - Scope: Package the candidate, tests, risk notes, side effects, network access, and proposed registry diff for human review.
+   - Purpose: Make the install decision auditable and separate from candidate generation.
+   - Hard safety rules: The package cannot install itself; approval for implementation is not approval for execution; all side effects and network access remain review items.
+
+7. `registry-install-review`
+   - Scope: Add a manual/admin-controlled path to install a reviewed candidate from a review package.
+   - Purpose: Convert a tested, reviewed candidate into a real registry entry only after explicit human action.
+   - Hard safety rules: No automatic or model-driven install; registry `status=installed` remains the only execution truth; installed entries must include validated schemas.
+
+8. `generated-tool-dry-run`
+   - Scope: Add a dry-run path for newly installed generated tools through the normal execution controls.
+   - Purpose: Verify sandbox wiring and evidence for generated tools without granting broad runtime autonomy.
+   - Hard safety rules: Dry runs require prior manual install and must go through normal plan, policy, approval, registry, schema, and sandbox checks.
+
+9. `navidrome-readonly-tool`
+   - Scope: Exercise the lifecycle with a low-risk Navidrome read-only generated tool candidate.
+   - Purpose: Prove the reviewed lifecycle on release/new-album lookup behavior before considering broader generated tools.
+   - Hard safety rules: No write or destructive behavior; no automatic install or execution; any real run must use installed registry status and the normal approved execution path.
+
+10. `routine-proposal-runtime`
+    - Scope: Add proposal-only routine runtime behavior that can create review artifacts from routine definitions.
+    - Purpose: Connect routines to the generated-tool lifecycle while keeping schedules and adapters as triggers only.
+    - Hard safety rules: Routines are workflow definitions, not authority; missing capabilities create proposals only; execution remains limited to the normal plan/policy/approval/registry/schema/sandbox flow.
 
 ## Medium-term backlog
 

@@ -75,6 +75,27 @@ function Assert-NoForbiddenImports {
     }
 }
 
+function Assert-RegistryReaderImportsReadOnly {
+    param([string]$Path)
+
+    $source = Get-Content -Raw -LiteralPath $Path
+    $forbiddenPatterns = @(
+        '(?m)^\s*import\s+sandbox\b',
+        '(?m)^\s*from\s+sandbox\b',
+        '(?m)^\s*import\s+tools\b',
+        '(?m)^\s*from\s+tools\b',
+        '(?m)^\s*import\s+main\b',
+        '(?m)^\s*from\s+main\b',
+        'registry\.(propose|approve|install|reject)\s*\(',
+        'sandbox\.run\s*\(',
+        'run_tool_by_name\s*\(',
+        'run_installed_tool\s*\('
+    )
+    foreach ($pattern in $forbiddenPatterns) {
+        Assert-True (-not ($source -match $pattern)) "Registry reader '$Path' must not reference forbidden pattern: $pattern"
+    }
+}
+
 function Assert-IndexMatchesOutput {
     param(
         [string]$OutputDir,
@@ -93,6 +114,12 @@ function Assert-IndexMatchesOutput {
     Assert-True ($index.authority_boundary.sandbox_worker_invoked -eq $false) "INDEX.json claims sandbox worker invoked."
     Assert-True ($index.authority_boundary.registry_modified -eq $false) "INDEX.json claims registry modified."
     Assert-True ($index.authority_boundary.generated_tool_execution_allowed -eq $false) "INDEX.json claims generated tool execution allowed."
+
+    Assert-True ($null -ne $index.registry_capability_lookup) "INDEX.json must include registry_capability_lookup summary."
+    Assert-True ($index.registry_capability_lookup.enabled -eq $true) "Registry capability lookup must be enabled for lab runs."
+    Assert-True ($index.registry_capability_lookup.registry_read -eq $true) "Registry read must be recorded as true."
+    Assert-True ($null -ne $index.registry_capability_lookup.tools_inspected_count) "tools_inspected_count should be present."
+    Assert-True ([int]$index.registry_capability_lookup.tools_inspected_count -gt 0) "tools_inspected_count should be positive."
 
     $actualFiles = @(Get-ChildItem -LiteralPath $OutputDir -File | Select-Object -ExpandProperty Name | Sort-Object)
     $listedFiles = @($index.artifacts | ForEach-Object { [string]$_.filename } | Sort-Object)
@@ -130,7 +157,10 @@ function Assert-IndexMatchesOutput {
 
     Assert-True ($index.fixture_lookup.enabled -eq $ExpectFixtureLookup) "INDEX.json fixture lookup enabled mismatch."
     if ($ExpectFixtureLookup) {
-        Assert-True ($index.fixture_lookup.source -like "static_fixture_lookup:*") "INDEX.json fixture lookup source should record static fixture source."
+        $src = [string]$index.fixture_lookup.source
+        Assert-True (
+            ($src -like "*fixture:*") -or ($src -like "static_fixture_lookup:*")
+        ) "INDEX.json fixture lookup source should record static fixture selection (got: '$src')."
         Assert-True ($index.fixture_lookup.advisory_only -eq $true) "INDEX.json fixture lookup must be advisory."
     } else {
         Assert-True ($null -eq $index.fixture_lookup.source) "INDEX.json fixture lookup source should be null when disabled."
@@ -229,6 +259,7 @@ try {
 
     Assert-NoForbiddenImports -Path (Join-Path $RepoRoot "automation_lab.py")
     Assert-NoForbiddenImports -Path (Join-Path $RepoRoot "local_model_adapter.py")
+    Assert-RegistryReaderImportsReadOnly -Path (Join-Path $RepoRoot "automation_lab_registry_read.py")
     Assert-GuardHashesUnchanged -RepoRoot $RepoRoot -Before $guardBefore
     Write-Host "OK: automation lab INDEX.json records review artifacts without authority."
 } finally {

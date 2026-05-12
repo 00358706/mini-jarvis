@@ -38,10 +38,10 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `integrations/openwebui/mini_jarvis_plan_review.py` (review + explicit approve/reject/execute with `--confirm`)
 
 ## Current local review dashboard (client-only)
-- `integrations/local_dashboard/` — static HTML/JS demo UI that uses gateway endpoints only for plan review (no gateway changes) and narrow local automation lab review routes for generating proposal artifacts, reading `INDEX.json`, and reading indexed artifacts only.
+- `integrations/local_dashboard/` — static HTML/JS demo UI that uses gateway endpoints only for plan review (no gateway changes) and narrow local automation lab review routes for generating proposal artifacts, listing recent runs from `INDEX.json`, reading `INDEX.json`, and reading indexed artifacts only.
 
 ## Current automation lab (proposal-only)
-- `scripts/automation_lab_propose.ps1` uses `automation_lab.py` to write indexed review artifacts under `data/automation_lab/<request_id>/`; optional local-model drafting via `local_model_adapter.py` and optional static capability fixture lookup via `fixtures/automation_lab/capabilities.json` are explicitly enabled, advisory only, and record evidence. `scripts/automation_lab_review.ps1` reads `INDEX.json` and prints a compact review summary without modifying artifacts. `INDEX.json` is review evidence only and marks artifacts as non-authority. The lab does not change `/ingest`, add endpoints, approve/authorize plans, execute tools, call the sandbox worker, install tools, call local models from review, or mutate the registry.
+- `scripts/automation_lab_propose.ps1` uses `automation_lab.py` to write indexed review artifacts under `data/automation_lab/<request_id>/`. Capability matching is **registry-informed** via read-only `registry.all_tools()` metadata through `automation_lab_registry_read.py` (no lifecycle mutations, no sandbox, no execution). `CAPABILITY_MATCHES.json` uses schema `automation-lab-capability-matches.v2` and records `registry_lookup`, `registry_matches`, `evidence_sources`, and `primary_outcome_source` (`registry_metadata` vs `static_fixture` vs `deterministic_template`). Optional static capability fixture lookup via `fixtures/automation_lab/capabilities.json` remains advisory demo/fallback and merges with registry candidates when matched. Optional local-model drafting via `local_model_adapter.py` remains advisory only. `scripts/automation_lab_review.ps1` reads `INDEX.json` and prints a compact review summary without modifying artifacts. `INDEX.json` is review evidence only and marks artifacts as non-authority. The lab does not change `/ingest`, add gateway endpoints, approve/authorize plans, execute tools, call the sandbox worker, install tools, call local models from review, or mutate the registry.
 
 ## Current design checkpoints
 - `docs/ACTION_EVIDENCE_SCHEMA.md` is a docs-only structured action evidence schema proposal for future action assurance; it is not implemented in runtime code.
@@ -69,3 +69,4 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `scripts/test_automation_lab_review_artifact_index.ps1`
 - `scripts/test_automation_lab_review_summary.ps1`
 - `scripts/test_automation_lab_dashboard_view.ps1`
+- `scripts/test_automation_lab_registry_capability_lookup.ps1`

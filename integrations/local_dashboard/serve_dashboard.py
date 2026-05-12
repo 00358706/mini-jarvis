@@ -124,6 +124,81 @@ def _artifact_names(index: dict) -> set[str]:
     return names
 
 
+def _recent_run_summary(index: dict) -> dict:
+    local_model = index.get("local_model") if isinstance(index.get("local_model"), dict) else {}
+    fixture_lookup = (
+        index.get("fixture_lookup") if isinstance(index.get("fixture_lookup"), dict) else {}
+    )
+    artifacts = index.get("artifacts") if isinstance(index.get("artifacts"), list) else []
+    return {
+        "request_id": index.get("request_id"),
+        "created_at": index.get("created_at"),
+        "proposal_kind": index.get("proposal_kind"),
+        "primary_capability_outcome": index.get("primary_capability_outcome"),
+        "local_model": {
+            "enabled": bool(local_model.get("enabled")),
+            "validation_state": local_model.get("validation_state"),
+        },
+        "fixture_lookup": {
+            "enabled": bool(fixture_lookup.get("enabled")),
+            "source": fixture_lookup.get("source"),
+        },
+        "artifact_count": len(artifacts),
+        "authority": False,
+    }
+
+
+def _recent_automation_lab_runs(limit: int = 25) -> dict:
+    root = (_REPO_ROOT / "data" / "automation_lab").resolve()
+    runs: list[dict] = []
+    skipped: list[dict] = []
+    if not root.exists():
+        return {"runs": runs, "skipped": skipped, "authority": False}
+
+    for run_dir in root.iterdir():
+        if not run_dir.is_dir():
+            continue
+        if not _REQUEST_ID_RE.fullmatch(run_dir.name):
+            skipped.append(
+                {
+                    "request_id": run_dir.name,
+                    "reason": "invalid_request_id",
+                    "authority": False,
+                }
+            )
+            continue
+        index_path = run_dir / "INDEX.json"
+        if not index_path.exists():
+            skipped.append(
+                {
+                    "request_id": run_dir.name,
+                    "reason": "missing_index",
+                    "authority": False,
+                }
+            )
+            continue
+        try:
+            index, _index_path = load_index(run_dir)
+        except Exception as exc:
+            skipped.append(
+                {
+                    "request_id": run_dir.name,
+                    "reason": "malformed_index",
+                    "error": str(exc),
+                    "authority": False,
+                }
+            )
+            continue
+        runs.append(_recent_run_summary(index))
+
+    runs.sort(key=lambda item: str(item.get("created_at") or item.get("request_id") or ""), reverse=True)
+    return {
+        "runs": runs[:limit],
+        "skipped": skipped,
+        "authority": False,
+    }
+
+
 def _safe_artifact_name(raw: str, index: dict) -> str:
     filename = unquote(raw or "")
     if not _ARTIFACT_NAME_RE.fullmatch(filename):
@@ -197,6 +272,13 @@ class Handler(BaseHTTPRequestHandler):
         parts = path.strip("/").split("/")
 
         try:
+            if method == "GET" and path == "/api/automation-lab/recent":
+                if "?" in self.path:
+                    raise ValueError("recent-runs route does not accept path input or query parameters")
+                response = _recent_automation_lab_runs()
+                self._send(200, _json_bytes(response), content_type="application/json; charset=utf-8")
+                return
+
             if method == "POST" and path == "/api/automation-lab/generate":
                 payload = self._read_json_body()
                 message = str(payload.get("message") or "").strip()

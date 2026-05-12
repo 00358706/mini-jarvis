@@ -91,6 +91,27 @@ function Assert-NoForbiddenImports {
     }
 }
 
+function Assert-RegistryReaderImportsReadOnly {
+    param([string]$Path)
+
+    $source = Get-Content -Raw -LiteralPath $Path
+    $forbiddenPatterns = @(
+        '(?m)^\s*import\s+sandbox\b',
+        '(?m)^\s*from\s+sandbox\b',
+        '(?m)^\s*import\s+tools\b',
+        '(?m)^\s*from\s+tools\b',
+        '(?m)^\s*import\s+main\b',
+        '(?m)^\s*from\s+main\b',
+        'registry\.(propose|approve|install|reject)\s*\(',
+        'sandbox\.run\s*\(',
+        'run_tool_by_name\s*\(',
+        'run_installed_tool\s*\('
+    )
+    foreach ($pattern in $forbiddenPatterns) {
+        Assert-True (-not ($source -match $pattern)) "Registry reader '$Path' must not reference forbidden pattern: $pattern"
+    }
+}
+
 function Invoke-FixtureCase {
     param(
         [string]$RepoRoot,
@@ -132,8 +153,15 @@ function Invoke-FixtureCase {
     Assert-True ($capabilities.primary_outcome -eq $ExpectedOutcome) "Expected outcome '$ExpectedOutcome' for case '$CaseName', got '$($capabilities.primary_outcome)'."
     Assert-True ($capabilities.fixture_lookup.enabled -eq $true) "CAPABILITY_MATCHES.json should include fixture lookup for case '$CaseName'."
     Assert-True ($capabilities.fixture_lookup.advisory_only -eq $true) "CAPABILITY_MATCHES fixture lookup must be advisory for case '$CaseName'."
-    Assert-True ($capabilities.fixture_lookup.registry_read -eq $false) "CAPABILITY_MATCHES fixture lookup must not read registry for case '$CaseName'."
-    Assert-True ($capabilities.fixture_lookup.registry_modified -eq $false) "CAPABILITY_MATCHES fixture lookup must not modify registry for case '$CaseName'."
+    Assert-True ($capabilities.fixture_lookup.fixture_file_only -eq $true) "Fixture lookup must be file-only for case '$CaseName'."
+    Assert-True ($capabilities.fixture_lookup.registry_modified -eq $false) "Fixture path must not modify registry for case '$CaseName'."
+    Assert-True ($capabilities.registry_lookup.enabled -eq $true) "CAPABILITY_MATCHES.json should include registry lookup for case '$CaseName'."
+    Assert-True ($capabilities.registry_lookup.registry_read -eq $true) "Registry metadata read must be recorded for case '$CaseName'."
+    Assert-True ($capabilities.registry_lookup.registry_modified -eq $false) "Registry lookup must not modify registry for case '$CaseName'."
+    Assert-True (@($capabilities.registry_matches).Count -gt 0) "registry_matches should list scored tools for case '$CaseName'."
+    $installedRow = @($capabilities.registry_matches | Where-Object { $_.status -eq "installed" } | Select-Object -First 1)
+    Assert-True ($null -ne $installedRow) "Expected at least one installed tool row in registry_matches for case '$CaseName'."
+    Assert-True ($null -ne $installedRow.input_schema_summary) "registry_matches should include input_schema_summary for case '$CaseName'."
     Assert-True ($capabilities.missing_capability_behavior.generated_tool_execution_allowed -eq $false) "generated_tool_execution_allowed must remain false for case '$CaseName'."
     Assert-True ($capabilities.authority_boundary.tools_executed -eq $false) "CAPABILITY_MATCHES claims tools executed for case '$CaseName'."
     Assert-True ($capabilities.authority_boundary.sandbox_worker_invoked -eq $false) "CAPABILITY_MATCHES claims sandbox worker invoked for case '$CaseName'."
@@ -222,6 +250,7 @@ try {
 
     Assert-NoForbiddenImports -Path (Join-Path $RepoRoot "automation_lab.py")
     Assert-NoForbiddenImports -Path (Join-Path $RepoRoot "local_model_adapter.py")
+    Assert-RegistryReaderImportsReadOnly -Path (Join-Path $RepoRoot "automation_lab_registry_read.py")
     Assert-GuardHashesUnchanged -RepoRoot $RepoRoot -Before $guardBefore
     Write-Host "OK: static capability fixture lookup is advisory and improves CAPABILITY_MATCHES.json only."
 } finally {
