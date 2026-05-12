@@ -1,20 +1,43 @@
 # mini-jarvis (Agentic Gateway)
 
-A small **local-first gateway** that ingests multimodal requests, classifies intent with a deterministic local model, routes to the right backend (homelab tools, local LLM, or cloud LLM), and runs **registered** tool calls through an isolated subprocess. It targets a homelab stack (Radarr, Sonarr, SABnzbd) with structured responses and an audit trail.
+A small **local-first control plane** for safe agentic workflows. It has a runtime gateway for normal installed-capability requests, a plan/policy/approval path for reviewed work, proposal-only authoring lanes for future capabilities, and a sandboxed execution boundary for installed tools. It targets a homelab stack (Radarr, Sonarr, SABnzbd) plus local project-maintenance workflows with structured responses and an audit trail.
 
 ---
 
 ## Current phase
 
-**Execution-isolated gateway** with a separate **agent configuration layer** (under `agents/`). The gateway owns validation, routing, and execution; `agents/` holds human-readable workflow configuration (purpose, prompts, allowlisted tool names, policy text, examples, optional local data) for future planners. **Nothing under `agents/` runs tools or touches the network today.**
+Mini-Jarvis is currently an **execution-isolated gateway** with a **plan/policy/approval layer**, **agents as configuration only**, and a proposal-only **Automation Lab** for capability authoring. The gateway owns validation, registry checks, policy, approval state, and execution; `agents/` holds human-readable workflow configuration and does not run tools or touch the network.
 
-**Implemented: Plan + Policy + Approval layer.** `plans.py` defines structured plan models; `policy.py` evaluates proposed plans; `approvals.py` stores pending, approved, rejected, and executed plan JSON under `data/plans/`; `agent_loader.py` reads agent folder metadata. The **`/plans/*`** routes cover planning and approval; **`POST /plans/{plan_id}/execute`** runs **approved** plans only, re-checks policy, and executes each step through the registry, schema validation, and **`sandbox`** (pending/proposed plans never execute here). **`/plans/propose`** also mirrors accepted/rejected proposal state into `data/workspaces/` as readable files only; those files do not authorize execution. **`dispatch.process()`** is unchanged for now.
+Implemented pieces include:
+- `POST /ingest` for the installed-tool/runtime lane.
+- `/plans/*` for proposal, review, explicit approval, and explicit execution.
+- Readable plan workspaces under `data/workspaces/` as evidence only.
+- Automation Lab proposal artifacts under `data/automation_lab/<request_id>/`.
+- Registry-informed, read-only capability lookup and deterministic scoring for review.
+- Tool build workspaces and review-only candidate generation under `data/tool_builds/<request_id>/`, including hardening that rejects unsafe build indexes and rolls back partial candidate output.
+
+`dispatch.process()` is unchanged for now.
 
 ---
 
-## Main pipeline (`POST /ingest`)
+## Control-plane lanes / chatbar mental model
 
-End-to-end flow for a typical ingest:
+`/ingest` remains the runtime/multimodal gateway lane for normal installed-capability requests. It is not the whole future control plane.
+
+A future chatbar, channel, or event surface should route internally to explicit lanes:
+- Existing capability/runtime request.
+- Plan proposal.
+- Automation Lab proposal.
+- Routine trigger later.
+- Review request.
+
+Automation Lab remains proposal/review-only. It must not execute tools, install tools, mutate the registry, call the sandbox worker, or bypass gateway policy and approval.
+
+---
+
+## Runtime pipeline (`POST /ingest`)
+
+End-to-end flow for the installed-tool/runtime lane:
 
 ```
 POST /ingest
@@ -62,7 +85,29 @@ POST /ingest
 └─────────────┘
 ```
 
-Other routing targets (`LOCAL_LLM`, `CLOUD_LLM`, `DROP`) skip the tool registry and sandbox; they still go through `dispatch` and are audited where applicable.
+Other routing targets (`LOCAL_LLM`, `CLOUD_LLM`, `DROP`) skip the tool registry and sandbox; they still go through `dispatch` and are audited where applicable. This diagram describes the runtime lane, not the whole future control-plane workflow.
+
+---
+
+## Automation Lab / capability authoring lane
+
+Automation Lab is the proposal/review lane for capability gaps and candidate authoring:
+
+```text
+chatbar/dashboard request
+-> automation_lab.py
+-> deterministic classification
+-> read-only registry capability lookup via automation_lab_registry_read.py
+-> optional fixture lookup
+-> deterministic capability scoring via automation_lab_capability_scoring.py
+-> CAPABILITY_MATCHES.json v3
+-> TOOL/ROUTINE/AGENT proposal artifact
+-> INDEX.json
+-> review CLI/dashboard
+-> no execution/install
+```
+
+Review artifacts live under `data/automation_lab/<request_id>/`. Tool build workspaces live under `data/tool_builds/<request_id>/` and may contain review-only candidate drafts. These files are evidence for humans; they are not registry entries, approvals, authorizations, or execution permission.
 
 ---
 
@@ -109,7 +154,7 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 
 ---
 
-## Repository layout (runtime)
+## Repository layout
 
 | Module | Role |
 |--------|------|
@@ -130,6 +175,14 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `approvals.py` | Stores pending, approved, rejected, and executed plan JSON under `data/plans/` |
 | `agent_loader.py` | Reads agent folder metadata from `agents/<id>/`; no code execution from agent dirs |
 | `workspace.py` | Manages task workspace files under `data/workspaces/`; filesystem only |
+| `automation_lab.py` | Writes proposal-only Automation Lab artifacts; no execution/install |
+| `automation_lab_review.py` | Read-only review summary helper for Automation Lab `INDEX.json` |
+| `automation_lab_registry_read.py` | Read-only registry capability evidence for Automation Lab |
+| `automation_lab_capability_scoring.py` | Deterministic advisory capability scoring and conflict reporting |
+| `local_model_adapter.py` | Optional local-model drafting helper; advisory only and disabled unless requested |
+| `scripts/automation_lab_create_tool_build.ps1` | Creates review-only tool build workspaces under `data/tool_builds/` |
+| `scripts/automation_lab_generate_tool_candidate.ps1` | Emits review-only candidate drafts under an existing tool build workspace |
+| `scripts/test_automation_lab_tool_candidate_generation.ps1` | Static/filesystem safety coverage for candidate generation |
 
 Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack: human → gateway → agent context → planner → policy → registry → approval/session → sandbox → tools → audit.
 
@@ -391,3 +444,4 @@ Deferred ideas and future branch candidates live in [`docs/BACKLOG.md`](docs/BAC
 - **New built-in tool**: implement in `tools.py`, register in `_TOOL_FUNCS`, seed or lifecycle through `registry`, extend `_INTENT_MAP` as needed, keep httpx calls behind `http_allowlist` checks.
 - **New routing target**: update `models.py`, `classification.py`, and `dispatch.py` together.
 - **Agent personas**: extend under `agents/<agent_id>/`; wire-up in application code is a separate phase.
+- **Generated tool candidates**: proposed/generated tools must move through proposal artifacts, a tool build workspace, tests, install review, explicit registry install, and then normal plan/policy/approval/schema/sandbox execution. Candidate files are not edited directly into production tools or registry state.

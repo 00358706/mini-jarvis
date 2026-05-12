@@ -124,12 +124,19 @@ foreach ($out in $outputs) {
     }
 }
 
-$bi = Read-JsonObject -Path $indexPath
+$originalIndexRaw = Get-Content -Raw -LiteralPath $indexPath -Encoding UTF8
+$bi = $originalIndexRaw | ConvertFrom-Json
 if ($bi.install_allowed -ne $false) {
     Exit-GenError "BUILD_INDEX.json install_allowed must be false for candidate generation."
 }
 if ($bi.execution_allowed -ne $false) {
     Exit-GenError "BUILD_INDEX.json execution_allowed must be false for candidate generation."
+}
+if ($bi.authority -ne $false) {
+    Exit-GenError "BUILD_INDEX.json authority must be false for candidate generation."
+}
+if ($bi.review_evidence_only -ne $true) {
+    Exit-GenError "BUILD_INDEX.json review_evidence_only must be true for candidate generation."
 }
 
 $proposalText = Get-Content -Raw -LiteralPath $proposalPath -Encoding UTF8
@@ -288,5 +295,8 @@ try {
     Write-Host "Wrote review-only candidate artifacts under data/tool_builds/$buildId"
 } catch {
     Remove-CandidateOutputsIfPresent -CandidateDir $candidateDir -TestsDir $testsDir
+    if (($null -ne $originalIndexRaw) -and (Test-PathUnderRoot -Path $indexPath -Root $buildRoot)) {
+        Set-Content -LiteralPath $indexPath -Value $originalIndexRaw -Encoding UTF8 -ErrorAction SilentlyContinue
+    }
     throw
 }
