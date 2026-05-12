@@ -59,7 +59,9 @@ Safe first branch:
 
 **Current hardening:** candidate generation rejects unsafe build indexes (`authority` must be false, `review_evidence_only` must be true) and restores the original `BUILD_INDEX.json` if generation fails after validation.
 
-**Still later:** `registry-install-review` (or equivalent) for real registry lifecycle decisions; optional executable test harness beyond `static_review`; model-driven refinement remains separate.
+**Implemented (persistent generated registry metadata):** After install-review packaging, `scripts/automation_lab_install_reviewed_tool.ps1` with explicit phrase `INSTALL_REVIEWED_TOOL` appends metadata to `data/registry/generated_installed_tools.json`; `registry.py` loads those rows at startup. **No** new gateway routes, **no** sandbox/tool execution, **no** `tools.py` dispatch for generated names; **generated-tool dry-run** / execution wiring remains later.
+
+**Still later:** generated-tool dry-run and any callable wiring; execution still requires the normal plan/policy/approval/registry/schema/sandbox path.
 
 ### Routine contract later
 

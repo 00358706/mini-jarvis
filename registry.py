@@ -27,7 +27,9 @@ Design notes:
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from models import ToolDefinition, ToolLifecycleStatus, ToolProposal
@@ -284,3 +286,61 @@ _seed_builtin(
     },
     permissions=["file:search"],
 )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Persistent reviewed generated-tool metadata (no execution dispatch)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_GENERATED_REGISTRY_PATH = (
+    Path(__file__).resolve().parent / "data" / "registry" / "generated_installed_tools.json"
+)
+
+
+def _load_generated_installed_tools() -> None:
+    """
+    Load metadata-only installed tool rows from disk after built-in seed.
+
+    Does not import candidate code, sandbox, tools, or gateway modules.
+    Skips invalid rows and collisions; does not create a dispatch path in tools.py.
+    """
+    path = _GENERATED_REGISTRY_PATH
+    if not path.is_file():
+        return
+    try:
+        raw = path.read_text(encoding="utf-8-sig")
+        data = json.loads(raw)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        logger.warning("generated registry | skip load: %s", exc)
+        return
+    if not isinstance(data, list):
+        logger.warning(
+            "generated registry | expected JSON array, got %s", type(data).__name__
+        )
+        return
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            logger.warning("generated registry | skip row %s: not an object", i)
+            continue
+        try:
+            entry = ToolDefinition.model_validate(item)
+        except Exception as exc:  # noqa: BLE001 — best-effort per row
+            logger.warning(
+                "generated registry | skip row %s: invalid ToolDefinition (%s)", i, exc
+            )
+            continue
+        if entry.status != "installed":
+            logger.warning(
+                "generated registry | skip row %s: status=%s (expected installed)",
+                i,
+                entry.status,
+            )
+            continue
+        k = _key(entry.name, entry.version)
+        if k in _registry:
+            logger.warning("generated registry | skip row %s: collision on %s", i, k)
+            continue
+        _registry[k] = entry
+        logger.info("generated registry | loaded %s", k)
+
+
+_load_generated_installed_tools()
