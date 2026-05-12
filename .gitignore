@@ -19,6 +19,9 @@ data/registry/*
 !data/registry/.gitkeep
 !data/registry/generated_installed_tools.json
 
+# Generated-tool dry-run evidence (local only; covered by data/* but listed for clarity)
+data/generated_tool_dry_runs/
+
 # Runtime plan JSON (keep optional .gitkeep)
 data/plans/**/*.json
 !data/plans/**/.gitkeep

@@ -59,9 +59,11 @@ Safe first branch:
 
 **Current hardening:** candidate generation rejects unsafe build indexes (`authority` must be false, `review_evidence_only` must be true) and restores the original `BUILD_INDEX.json` if generation fails after validation.
 
-**Implemented (persistent generated registry metadata):** After install-review packaging, `scripts/automation_lab_install_reviewed_tool.ps1` with explicit phrase `INSTALL_REVIEWED_TOOL` appends metadata to `data/registry/generated_installed_tools.json`; `registry.py` loads those rows at startup. **No** new gateway routes, **no** sandbox/tool execution, **no** `tools.py` dispatch for generated names; **generated-tool dry-run** / execution wiring remains later.
+**Implemented (persistent generated registry metadata):** After install-review packaging, `scripts/automation_lab_install_reviewed_tool.ps1` with explicit phrase `INSTALL_REVIEWED_TOOL` appends metadata to `data/registry/generated_installed_tools.json`; `registry.py` loads those rows at startup. **No** new gateway routes, **no** sandbox/tool execution, **no** `tools.py` dispatch for generated names.
 
-**Still later:** generated-tool dry-run and any callable wiring; execution still requires the normal plan/policy/approval/registry/schema/sandbox path.
+**Implemented (generated-tool dry-run, review-only):** `scripts/automation_lab_generated_tool_dry_run.ps1` plus `scripts/generated_tool_dry_run.py` write evidence under `data/generated_tool_dry_runs/<run_id>/` proving registry metadata vs absence of `tools.py` dispatch; no candidate execution, no registry mutation, no sandbox. This is a **safety/review boundary only**, not approval to execute.
+
+**Still later:** callable wiring for generated tools (dispatch in `tools.py` or equivalent) and any execution path; execution still requires the normal plan/policy/approval/registry/schema/sandbox path.
 
 ### Routine contract later
 

@@ -9,15 +9,25 @@ Responsibility:
 Lifecycle states:
   proposed   — tool has been submitted for review (not yet runnable)
   approved   — reviewed and cleared (not yet installed)
-  installed  — code / endpoint is ready; registered and callable
+  installed  — registered as installed in this registry (known to the gateway)
   rejected   — proposal denied (terminal)
 
+Installed registry metadata vs callable dispatch:
+  - Rows here mean the registry *knows* about a tool (name, version, endpoint, schema).
+  - Callable dispatch for built-in tools is separate: `tools.py` routes execution via
+    `_TOOL_FUNCS` by tool name. A name present only as persisted *generated* metadata
+    is not callable until a future branch explicitly wires it into that dispatch map.
+  - Generated metadata entries loaded from `data/registry/generated_installed_tools.json`
+    are installed *metadata* only; they are not executable through `run_tool_by_name`
+    until such wiring exists.
+
 Security invariants:
-  - Only tools in state "installed" may be executed.
-  - Registry is the single source of truth — no tool can be called unless
-    it appears here with status == "installed".
+  - Registry `installed` records lifecycle/metadata in this module; generated persisted
+    rows do not imply `run_tool_by_name` dispatch exists for that name.
+  - End-to-end execution requires the normal plan/policy/approval/schema/sandbox path and
+    a `tools.py` dispatch implementation where applicable.
   - Tool definitions include an input_schema so callers can validate args
-    before dispatch.
+    before dispatch attempts.
 
 Design notes:
   - In-memory store (dict keyed by name + version string "name:v1").
