@@ -6,7 +6,7 @@ The lab creates review artifacts under `data/automation_lab/<request_id>/` from 
 
 Optional local-model drafting can be enabled explicitly for review assistance. It is off by default and model output remains advisory evidence only.
 
-Static capability fixture lookup can also be enabled explicitly to enrich capability-match evidence. Fixtures are advisory hints only; they do not read, install, update, or replace the real registry.
+Static capability fixture lookup can also be enabled explicitly to enrich capability-match evidence. Fixtures are advisory hints only; they do not install, update, or replace the real registry. The lab also performs a **read-only** Python registry pass (`registry.all_tools()`) for evidence. `CAPABILITY_MATCHES.json` schema `automation-lab-capability-matches.v3` adds deterministic **lane scores** (`score`, `score_breakdown`), `recommended_outcome`, `recommendation_reason`, `precedence_applied`, and `conflicts` when layers disagree. **Strong installed** registry signals take precedence over a static fixture that suggests `propose_new`; fixture text is never silently dropped (see `fixture_alternate_recommendation` and conflict records).
 
 ## CLI
 
@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\automation_lab_propose.ps1 `
   -FixturePath ".\fixtures\automation_lab\capabilities.json"
 ```
 
-Fixture lookup only improves `CAPABILITY_MATCHES.json` fields such as `candidate_tools`, `primary_outcome`, `lookup_notes`, and `outcomes_considered`.
+Fixture lookup merges with registry-informed candidates and scoring; see `CAPABILITY_MATCHES.json` (`score_breakdown`, `conflicts`, `precedence_applied`).
 
 Read-only review summary for an existing run:
 

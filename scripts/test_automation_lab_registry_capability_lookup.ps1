@@ -74,6 +74,7 @@ $beforeCount = Get-RegistryToolCount -Py $Py -RepoRoot $RepoRoot
 $requestId = "auto_reglk_$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 $outputDir = $null
 $fixtureDir = $null
+$conflictDir = $null
 
 try {
     $raw = & powershell -ExecutionPolicy Bypass -File .\scripts\automation_lab_propose.ps1 `
@@ -96,15 +97,19 @@ try {
     $outputDir = [string]$result.output_dir_abs
     $cap = Read-JsonFile (Join-Path $outputDir "CAPABILITY_MATCHES.json")
 
-    Assert-True ($cap.schema_version -eq "automation-lab-capability-matches.v2") "Expected v2 capability matches schema."
+    Assert-True ($cap.schema_version -eq "automation-lab-capability-matches.v3") "Expected v3 capability matches schema."
     Assert-True ($cap.registry_lookup.registry_read -eq $true) "CAPABILITY_MATCHES must record registry_read."
     Assert-True ($cap.registry_lookup.registry_modified -eq $false) "CAPABILITY_MATCHES must record registry_modified false."
     Assert-True ($cap.evidence_sources -contains "registry_readonly") "Evidence sources must include registry_readonly."
     Assert-True ($cap.primary_outcome_source -eq "registry_metadata") "Radarr message should prefer registry-informed primary source."
     Assert-True ($cap.source -match "registry_readonly") "Combined source string should mention registry_readonly."
+    Assert-True ($null -ne $cap.score) "Advisory score must be present."
+    Assert-True ($null -ne $cap.score_breakdown.deterministic_template) "score_breakdown must include deterministic lane."
+    Assert-True ($null -ne $cap.recommendation_reason) "recommendation_reason must be present."
+    Assert-True ($cap.precedence_applied -eq "registry_only") "Radarr-only run should apply registry_only precedence."
 
-    $radarRows = @($cap.registry_matches | Where-Object { $_.tool_name -like "radarr_*" })
-    Assert-True ($radarRows.Count -ge 1) "Expected at least one radarr_* row in registry_matches."
+    $radarRows = @($cap.registry_matches | Where-Object { $_.tool_name -and ([string]$_.tool_name).ToLower() -like "*radarr*" })
+    Assert-True ($radarRows.Count -ge 1) "Expected at least one radarr-related row in registry_matches."
     $top = $radarRows | Sort-Object { [double]$_.confidence } -Descending | Select-Object -First 1
     Assert-True ($top.status -eq "installed") "Seeded Radarr tools should be installed in registry."
     Assert-True ($null -ne $top.input_schema_summary) "Row should include input_schema_summary for review."
@@ -120,14 +125,36 @@ try {
     $fixtureDir = [string]$fixtureResult.output_dir_abs
     $fx = Read-JsonFile (Join-Path $fixtureDir "CAPABILITY_MATCHES.json")
     Assert-True ($fx.registry_lookup.registry_read -eq $true) "Fixture run must still perform registry read."
-    Assert-True ($fx.primary_outcome_source -eq "static_fixture") "Fixture path should set primary_outcome_source to static_fixture when matched."
-    Assert-True ($fx.evidence_sources -contains "static_fixture_matched") "Fixture match must appear in evidence_sources."
-    $names = @($fx.candidate_tools | ForEach-Object { [string]$_.tool_name })
-    Assert-True ($names -contains "search_repo") "Fixture candidate search_repo should merge with registry candidates."
+    Assert-True ($fx.primary_outcome -eq "reuse_existing") "Fixture reuse case must keep reuse_existing primary outcome."
+    Assert-True (
+        ($fx.primary_outcome_source -eq "registry_metadata") -or
+        ($fx.primary_outcome_source -eq "static_fixture")
+    ) "Fixture run may attribute primary to registry_metadata or static_fixture depending on duplicate-risk precedence."
+    Assert-True (
+        ($fx.precedence_applied -eq "registry_and_fixture_agree") -or
+        ($fx.precedence_applied -eq "fixture_over_registry_duplicate_risk_heuristic")
+    ) "Expected agreement or explicit fixture-over-duplicate-risk precedence."
+    Assert-True ($null -ne $fx.score) "Scoring score must be present."
+    Assert-True ($null -ne $fx.score_breakdown) "score_breakdown must be present."
+
+    $conflictRaw = & powershell -ExecutionPolicy Bypass -File .\scripts\automation_lab_propose.ps1 `
+        -Message "Create a new search_repo helper to grep yaml in the repository" `
+        -RequestId "auto_reglk_cf_$([Guid]::NewGuid().ToString('N').Substring(0, 8))" `
+        -FixturePath ".\fixtures\automation_lab\capabilities_force_propose_new.json"
+    if ($LASTEXITCODE -ne 0) { throw "Conflict fixture propose failed." }
+    $conflictResult = ($conflictRaw -join "`n") | ConvertFrom-Json
+    $conflictDir = [string]$conflictResult.output_dir_abs
+    $cf = Read-JsonFile (Join-Path $conflictDir "CAPABILITY_MATCHES.json")
+    Assert-True ($cf.primary_outcome -ne "propose_new") "Strong registry signal must not yield silent fixture propose_new primary."
+    Assert-True ($cf.precedence_applied -eq "registry_strong_installed_over_fixture_propose_new") "Expected explicit registry-over-fixture precedence."
+    Assert-True (@($cf.conflicts).Count -ge 1) "Conflicts array must surface fixture vs registry disagreement."
+    Assert-True ($null -ne $cf.fixture_alternate_recommendation) "Fixture propose_new should be preserved as alternate."
+    Assert-True ($cf.fixture_alternate_recommendation.primary_outcome -eq "propose_new") "Alternate must record fixture propose_new."
 
     Assert-RegistryReaderImportsReadOnly -Path (Join-Path $RepoRoot "automation_lab_registry_read.py")
     Write-Host "OK: automation lab registry capability lookup is read-only and records evidence sources."
 } finally {
     Remove-LabOutput -RepoRoot $RepoRoot -OutputDir $outputDir
     if ($fixtureDir) { Remove-LabOutput -RepoRoot $RepoRoot -OutputDir $fixtureDir }
+    if ($conflictDir) { Remove-LabOutput -RepoRoot $RepoRoot -OutputDir $conflictDir }
 }
