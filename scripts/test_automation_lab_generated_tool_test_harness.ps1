@@ -172,9 +172,11 @@ def x() -> None:
 $positiveId = "tb_harn_$([Guid]::NewGuid().ToString('N').Substring(0, 12))"
 $unsafeIdxId = "tb_harn_badidx_$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
 $unsafeCandId = "tb_harn_badpy_$([Guid]::NewGuid().ToString('N').Substring(0, 8))"
+$rollbackId = "tb_harn_rb_$([Guid]::NewGuid().ToString('N').Substring(0, 10))"
 $positiveRoot = Join-Path $buildsRoot $positiveId
 $unsafeIdxRoot = Join-Path $buildsRoot $unsafeIdxId
 $unsafeCandRoot = Join-Path $buildsRoot $unsafeCandId
+$rollbackRoot = Join-Path $buildsRoot $rollbackId
 
 try {
     # --- Positive ---
@@ -242,6 +244,22 @@ try {
     $biBad = Read-JsonFile -Path (Join-Path $unsafeCandRoot "BUILD_INDEX.json")
     Assert-True ($biBad.PSObject.Properties.Name -notcontains "test_harness_completed") "BUILD_INDEX must not gain harness fields on failed static checks."
 
+    # --- I/O failure rollback ---
+    New-ToolBuildHarnessFixture -BuildRoot $rollbackRoot -BuildId $rollbackId -IndexOverrides $null -CandidatePyContent $goodPy
+    $rollbackIndex = Join-Path $rollbackRoot "BUILD_INDEX.json"
+    $rollbackOriginal = Get-Content -Raw -LiteralPath $rollbackIndex -Encoding UTF8
+    try {
+        Set-ItemProperty -LiteralPath $rollbackIndex -Name IsReadOnly -Value $true
+        $rRollback = Invoke-Harness -ScriptPath $harnessPath -ToolBuildId $rollbackId
+    } finally {
+        Set-ItemProperty -LiteralPath $rollbackIndex -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+    }
+    Assert-True ($rRollback.Code -ne 0) "Read-only BUILD_INDEX.json should force rollback path."
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $rollbackRoot "TEST_RESULTS.json"))) "Rollback must remove partial TEST_RESULTS.json."
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $rollbackRoot "TEST_SUMMARY.md"))) "Rollback must remove partial TEST_SUMMARY.md."
+    $rollbackAfter = Get-Content -Raw -LiteralPath $rollbackIndex -Encoding UTF8
+    Assert-True ($rollbackAfter -eq $rollbackOriginal) "Rollback must leave BUILD_INDEX.json content unchanged."
+
     # --- Invalid ids / missing workspace ---
     foreach ($bad in @("short", "has/slash", "..\\trav")) {
         $rb = Invoke-Harness -ScriptPath $harnessPath -ToolBuildId $bad
@@ -259,7 +277,11 @@ try {
     Assert-GuardHashesUnchanged -RepoRoot $RepoRoot -Before $guardBefore
     Write-Host "OK: generated tool test harness tests passed."
 } finally {
-    foreach ($p in @($positiveRoot, $unsafeIdxRoot, $unsafeCandRoot)) {
+    foreach ($p in @($positiveRoot, $unsafeIdxRoot, $unsafeCandRoot, $rollbackRoot)) {
+        $idx = Join-Path $p "BUILD_INDEX.json"
+        if ($idx -and (Test-Path -LiteralPath $idx)) {
+            Set-ItemProperty -LiteralPath $idx -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+        }
         if ($p -and (Test-Path -LiteralPath $p)) {
             Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue
         }
