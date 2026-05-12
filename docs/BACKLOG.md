@@ -55,9 +55,11 @@ Safe first branch:
 
 **Implemented (static harness):** `scripts/automation_lab_test_tool_candidate.ps1` writes `TEST_RESULTS.json` and `TEST_SUMMARY.md` under the same build folder using offline checks only; it does not execute or import candidate code. Passing results are review evidence only and do not approve install or execution.
 
+**Implemented (install review packaging):** `scripts/automation_lab_create_tool_install_review.ps1` writes `INSTALL_MANIFEST.json` and `INSTALL_REVIEW.md` for human review only; it does not install, mutate the registry, or execute tools. Execution after any future install still requires the normal plan/policy/approval/registry/schema/sandbox path.
+
 **Current hardening:** candidate generation rejects unsafe build indexes (`authority` must be false, `review_evidence_only` must be true) and restores the original `BUILD_INDEX.json` if generation fails after validation.
 
-**Still later:** optional executable test harness that runs isolated tests against a reviewed implementation (separate branch/scope from static `static_review` harness).
+**Still later:** `registry-install-review` (or equivalent) for real registry lifecycle decisions; optional executable test harness beyond `static_review`; model-driven refinement remains separate.
 
 ### Routine contract later
 
