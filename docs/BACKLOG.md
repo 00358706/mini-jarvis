@@ -69,6 +69,79 @@ Safe first branch:
 
 **Still later:** callable wiring for generated tools (dispatch in `tools.py` or equivalent) and any execution path; execution still requires the normal plan/policy/approval/registry/schema/sandbox path.
 
+### Gateway authority hardening later
+
+Problem:
+Mini-Jarvis has grown from a simple `/ingest` classifier/router into a gateway authority system with explicit plan, policy, approval, registry, schema, and sandbox enforcement. The older `/ingest` → `LOCAL_TOOLS` → `tools_execute` shortcut is **gated by default** on branch `ingest-lane-gating` (no direct tool or sandbox execution from `/ingest` for that target; use `/plans/*`). Further lane-router work may still be needed for other entry surfaces and for automatic plan materialization from gated ingest text.
+
+Goal:
+Normalize all external entrypoints into an explicit authority-preserving flow:
+
+```text
+chatbar / channel / event / /ingest
+-> input envelope
+-> lane router
+-> plan proposal or automation-lab proposal or review lane
+-> policy / approval / registry / schema / sandbox only when execution is explicitly allowed
+```
+
+Rules:
+- `/ingest` remains the input surface.
+- `/ingest` must not bypass plan/policy/approval for side-effecting or uncertain actions.
+- `LOCAL_TOOLS` should become a planning/lane hint, not execution permission.
+- No approve+execute shortcuts.
+- Model output is not authorization.
+- Registry, policy, approval, schema, and sandbox remain enforcement.
+- Do not add generated tool execution as part of gateway hardening.
+- Keep each branch narrow and avoid endpoint expansion unless that branch explicitly selects a router split.
+
+Branch sequence:
+
+1. `ingest-lane-gating` (**baseline implemented**)
+   - Scope: Change `/ingest` routing semantics so `LOCAL_TOOLS` classifications do **not** call `tools.execute` or the sandbox by default; return an explicit plan-required lane and audit gate instead of immediate tool execution. (Further work: deterministic plan-from-ingest helpers without broad refactor — see `plan-builder-generalization`.)
+   - Purpose: Make `/ingest` a lane router aligned with the gateway authority model while preserving it as the multimodal input surface.
+   - Hard safety rules: No approve+execute shortcuts; no automatic execution for side-effecting or uncertain actions; model/classifier output must not authorize execution; registry/policy/approval/schema/sandbox remain required before any execution.
+
+2. `approval-state-locking`
+   - Scope: Bind approval state to the exact reviewed plan content and reject execution when a pending/approved plan has changed or is missing its reviewed-content reference.
+   - Purpose: Prevent stale, swapped, or rewritten plan files from inheriting approval.
+   - Hard safety rules: Approval is not portable across plan edits; workspace files remain evidence, not authority; execution must fail closed on missing or mismatched approval state.
+
+3. `policy-approval-unit-tests`
+   - Scope: Add focused tests for policy decisions, approval transitions, and execution preconditions around `/plans/*` and any gated ingest lane.
+   - Purpose: Lock down the authority boundary before widening generated dispatch or runtime integrations.
+   - Hard safety rules: Tests must not call real services, install generated tools, mutate durable registry behavior, or add execution shortcuts.
+
+4. `approval-role-keys`
+   - Scope: Design and implement distinct local operator/role key handling for approval-capable actions, separate from ordinary API access if needed.
+   - Purpose: Make "can call the gateway" different from "can approve execution" where policy requires that distinction.
+   - Hard safety rules: Existing API auth remains required; no weaker fallback approval path; no stored secrets in repo; role checks must fail closed.
+
+5. `pending-approval-notifications`
+   - Scope: Add notification or listing hooks for pending approvals without changing approval or execution semantics.
+   - Purpose: Improve operator visibility while keeping human review explicit.
+   - Hard safety rules: Notifications must be informational only; no approve/reject/execute side effects from notification delivery; no auto-approval.
+
+6. `plan-builder-generalization`
+   - Scope: Generalize deterministic request-to-plan construction beyond the current `/plans/from-message` helper and agent-specific cases.
+   - Purpose: Give lane-gated inputs a consistent way to become reviewable plan proposals.
+   - Hard safety rules: Plan building is proposal-only; it must not approve, execute, install tools, or bypass policy/registry checks.
+
+7. `tool-http-allowlist-guard`
+   - Scope: Harden tests and guardrails around per-tool HTTP destination validation for configured service base URLs.
+   - Purpose: Ensure any future runtime lane continues to prevent accidental or buggy calls outside configured service scopes.
+   - Hard safety rules: No new real service calls in tests; no broad network allowlists; validation must fail closed.
+
+8. `fastapi-router-split`
+   - Scope: Split `main.py` routes into focused FastAPI routers/modules after behavior is covered by tests.
+   - Purpose: Reduce coupling between ingest, plans, workspace review, tools lifecycle, and observability without changing route behavior.
+   - Hard safety rules: Preserve endpoint contracts; do not add endpoints; do not weaken auth; no behavior change without explicit tests.
+
+9. `plan-step-idempotency-dry-run`
+   - Scope: Add plan-step metadata and dry-run/preflight conventions for idempotency, duplicate detection, and side-effect review.
+   - Purpose: Help operators understand whether repeating a step is safe before execution.
+   - Hard safety rules: Dry-run/preflight is not execution approval; no real service mutation; execution still requires policy, approval, registry, schema, and sandbox.
+
 ### Routine contract later
 
 Design framing: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md` (durable authority vs evidence; schedules/adapters as triggers).
@@ -344,6 +417,12 @@ Implemented/current slices:
 - `registry-install-review`: persistent generated registry metadata can be appended only through the explicit `INSTALL_REVIEWED_TOOL` manual confirmation path; install remains metadata-only and is not execution approval.
 - `generated-tool-dry-run`: review-only dry-run evidence proves installed generated metadata against the absence of callable `tools.py` dispatch; it does not import or execute candidate code, call sandbox, mutate registry, or add routes.
 - `navidrome-readonly-tool`: the offline Navidrome read-only lifecycle example exercises the existing build -> candidate -> static harness -> install-review -> manual metadata install -> dry-run flow with synthetic artifacts only; it is not a runnable Navidrome integration.
+
+Prerequisite note:
+Before `generated-callable-dispatch-gate`, `navidrome-runtime-readonly-integration`, or any real runtime generated-tool execution, complete or explicitly defer:
+- `ingest-lane-gating`
+- `approval-state-locking`
+- `policy-approval-unit-tests`
 
 Remaining focused sequence:
 

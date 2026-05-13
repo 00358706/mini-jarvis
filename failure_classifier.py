@@ -38,6 +38,7 @@ def classify_failure(
     cloud_blocked: bool = False,
     no_matching_tool_intent: bool = False,
     validation_error: str | None = None,
+    ingest_tool_execution_gated: bool = False,
 ) -> FailureReason | None:
     """
     Return a FailureReason when the request did not fully succeed, else None.
@@ -48,6 +49,8 @@ def classify_failure(
         return "MISSING_CAPABILITY"
 
     if routed_to == "LOCAL_TOOLS":
+        if ingest_tool_execution_gated:
+            return None
         if no_matching_tool_intent:
             return "MISSING_CAPABILITY"
         if tool_name in (None, "", "none"):

@@ -10,7 +10,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 
 ## Implemented APIs
 - **Ingest**
-  - `POST /ingest`
+  - `POST /ingest` — normalises and classifies input. When the classifier routes to `LOCAL_TOOLS`, the gateway **does not** execute installed tools or invoke the sandbox on this path by default; the response indicates that a **pending plan** and explicit **approval** are required, and the audit log records `gate: ingest_tool_execution_disabled`. Use `/plans/from-message` (where supported), `POST /plans/propose`, then `POST /plans/{plan_id}/approve` and `POST /plans/{plan_id}/execute` for execution. Natural language in chat is not authorization.
 - **Plan API**
   - `POST /plans/propose`
   - `GET /plans/pending`
