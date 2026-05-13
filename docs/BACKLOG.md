@@ -71,6 +71,8 @@ Safe first branch:
 
 ### Routine contract later
 
+Design framing: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md` (durable authority vs evidence; schedules/adapters as triggers).
+
 Problem:
 Mini-Jarvis needs a first-class way to describe repeatable workflows without turning schedules, agents, or input adapters into execution authorities.
 
@@ -116,7 +118,7 @@ Safe first branch:
 
 ### Routines later
 
-Repeatable Mini-Jarvis tasks should follow `docs/ROUTINE_CONTRACT.md` before any runtime routine or scheduler work.
+Repeatable Mini-Jarvis tasks should follow `docs/ROUTINE_CONTRACT.md` before any runtime routine or scheduler work. See also `docs/AUTHORITY_AND_EVIDENCE_MODEL.md` for audit vs full-workspace defaults.
 
 Examples:
 - on-demand project status routine
@@ -132,7 +134,7 @@ Rules:
 
 ### Input and device adapters later
 
-Future trusted-network input sources should follow `docs/IO_ADAPTER_CONTRACT.md` before any implementation work.
+Future trusted-network input sources should follow `docs/IO_ADAPTER_CONTRACT.md` before any implementation work. Triggers vs authority: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md`.
 
 Examples:
 - control panel chat bar
@@ -165,6 +167,8 @@ Rules:
 - Do not expose sandbox/tool execution through MCP.
 
 ### Workspace retention and compaction later
+
+Design framing: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md` (archives, compaction principles, test cleanup expectations).
 
 Problem:
 Smoke tests, proposal flows, and review mirrors create many workspace folders. Over time, `data/workspaces/` can become larger than the codebase because it stores redundant copies of plan, policy, result, and review artifacts.
@@ -201,6 +205,7 @@ Suggested branch sequence:
 Inspired by the principle: model output is not authority.
 
 Design checkpoint:
+- See `docs/AUTHORITY_AND_EVIDENCE_MODEL.md` for authority vs compact audit vs full workspaces.
 - See `docs/ACTION_EVIDENCE_SCHEMA.md` for the docs-only proposed evidence schema.
 - See `docs/EXECUTION_AUTHORIZATION.md` for the docs-only execution authorization contract.
 - The schema is not implemented in runtime code.
@@ -249,6 +254,8 @@ Safe first branch:
 - Do not change execution behavior in the first pass.
 
 ### Policy/risk model later
+
+Durable policy surface vs execution evidence: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md`.
 
 Current policy is still simple.
 
@@ -313,7 +320,7 @@ Safe first step:
 
 ### Generated tool lifecycle roadmap later
 
-This roadmap is a branch sequence for moving from advisory automation lab artifacts toward a reviewed generated-tool lifecycle. It is backlog guidance only, not approval to execute, register, install, or run generated tools.
+This roadmap is a branch sequence for moving from advisory automation lab artifacts toward a reviewed generated-tool lifecycle. It is backlog guidance only, not approval to execute, register, install, or run generated tools. Evidence vs execution authority: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md`.
 
 Global safety rules:
 - Model output is proposal, not authority.
