@@ -102,10 +102,10 @@ Branch sequence:
    - Purpose: Make `/ingest` a lane router aligned with the gateway authority model while preserving it as the multimodal input surface.
    - Hard safety rules: No approve+execute shortcuts; no automatic execution for side-effecting or uncertain actions; model/classifier output must not authorize execution; registry/policy/approval/schema/sandbox remain required before any execution.
 
-2. `approval-state-locking`
-   - Scope: Bind approval state to the exact reviewed plan content and reject execution when a pending/approved plan has changed or is missing its reviewed-content reference.
-   - Purpose: Prevent stale, swapped, or rewritten plan files from inheriting approval.
-   - Hard safety rules: Approval is not portable across plan edits; workspace files remain evidence, not authority; execution must fail closed on missing or mismatched approval state.
+2. `approval-state-locking` (**baseline implemented**)
+   - Scope: Bind approval to canonical plan content (`reviewed_plan_sha256` on pending, `approved_plan_sha256` on approved); verify on approve; verify before execute; `409` when a plan was already executed; legacy plans without hashes fail closed until re-proposed.
+   - Purpose: Prevent stale, swapped, or rewritten plan JSON from inheriting approval or executing twice.
+   - Hard safety rules: Approval is not portable across plan edits; workspace files remain evidence, not authority; execution fails closed on missing or mismatched hashes before policy/tools/sandbox; no approve+execute shortcut.
 
 3. `policy-approval-unit-tests`
    - Scope: Add focused tests for policy decisions, approval transitions, and execution preconditions around `/plans/*` and any gated ingest lane.

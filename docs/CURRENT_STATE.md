@@ -12,12 +12,12 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - **Ingest**
   - `POST /ingest` — normalises and classifies input. When the classifier routes to `LOCAL_TOOLS`, the gateway **does not** execute installed tools or invoke the sandbox on this path by default; the response indicates that a **pending plan** and explicit **approval** are required, and the audit log records `gate: ingest_tool_execution_disabled`. Use `/plans/from-message` (where supported), `POST /plans/propose`, then `POST /plans/{plan_id}/approve` and `POST /plans/{plan_id}/execute` for execution. Natural language in chat is not authorization.
 - **Plan API**
-  - `POST /plans/propose`
+  - `POST /plans/propose` — persists pending plans with a server-computed **`reviewed_plan_sha256`** over the canonical plan core (client-supplied digest fields are stripped and recomputed). Legacy on-disk plans without hashes are intentionally unsupported for approve/execute until re-proposed.
   - `GET /plans/pending`
-  - `GET /plans/pending/{plan_id}`
-  - `POST /plans/{plan_id}/approve`
+  - `GET /plans/pending/{plan_id}` — includes **`reviewed_plan_sha256`** when present.
+  - `POST /plans/{plan_id}/approve` — requires **`reviewed_plan_sha256`** on the pending document and verifies it matches a fresh digest; writes **`approved_plan_sha256`**; does not execute.
   - `POST /plans/{plan_id}/reject`
-  - `POST /plans/{plan_id}/execute`
+  - `POST /plans/{plan_id}/execute` — requires **`approved_plan_sha256`**, verifies current plan core matches that digest **before** policy or tool/sandbox calls; returns **`409`** with `already_executed` if the plan is already under `executed/`; approval never implies execution.
 - **Workspace review API (read-only)**
   - `GET /workspaces?state=active|completed|rejected`
   - `GET /workspaces/{state}/{task_id}`

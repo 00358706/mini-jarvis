@@ -223,13 +223,13 @@ Current `main.py` routes:
 |--------|------|---------|
 | `GET` | `/health` | unauthenticated health/status |
 | `POST` | `/ingest` | normalise, classify, route, and return a gateway response |
-| `POST` | `/plans/propose` | policy-check and store a proposed plan; no execution |
+| `POST` | `/plans/propose` | policy-check and store pending plan with server `reviewed_plan_sha256`; strips client hash fields; no execution |
 | `POST` | `/plans/from-message` | deterministic frontend helper that creates a proposed plan; no approval or execution |
 | `GET` | `/plans/pending` | list pending plan ids |
-| `GET` | `/plans/pending/{plan_id}` | read one pending plan |
-| `POST` | `/plans/{plan_id}/approve` | move pending plan to approved; no execution |
+| `GET` | `/plans/pending/{plan_id}` | read one pending plan (includes `reviewed_plan_sha256` when present) |
+| `POST` | `/plans/{plan_id}/approve` | verify pending hash, set `approved_plan_sha256`, move to approved; no execution |
 | `POST` | `/plans/{plan_id}/reject` | move pending plan to rejected |
-| `POST` | `/plans/{plan_id}/execute` | execute an approved plan through registry/schema/sandbox checks |
+| `POST` | `/plans/{plan_id}/execute` | verify approved content hash, then policy + registry/schema/sandbox; `409` if already executed |
 | `GET` | `/workspaces?state=active\|completed\|rejected` | list read-only workspace summaries |
 | `GET` | `/workspaces/{state}/{task_id}` | read one workspace summary |
 | `GET` | `/workspaces/{state}/{task_id}/files/{filename}` | read one known workspace artifact |
@@ -305,6 +305,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
 - `python scripts/test_plans_from_message_no_execute.py` is a local regression test that fails if `/plans/from-message` crosses into tool execution.
 - `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
+- `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.

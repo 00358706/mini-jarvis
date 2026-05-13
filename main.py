@@ -74,11 +74,14 @@ import registry as reg
 from agent_loader import get_agent_tool_policy, load_agent
 from approvals import (
     approve_plan,
+    compute_plan_sha256,
     list_pending_plans,
-    load_plan,
+    load_plan_storage_dict,
     mark_executed,
+    plan_already_executed,
     reject_plan,
     save_pending_plan,
+    storage_dict_to_plan,
 )
 from config import cfg
 from dispatch import process
@@ -660,7 +663,8 @@ async def plans_pending_list():
 async def plans_pending_get(plan_id: str):
     """Plan API — non-breaking planning/approval layer. No execution."""
     try:
-        p = load_plan(plan_id, status="pending")
+        raw = load_plan_storage_dict(plan_id, "pending")
+        p = storage_dict_to_plan(raw)
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -668,7 +672,11 @@ async def plans_pending_get(plan_id: str):
         ) from None
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
-    return p.model_dump(mode="json")
+    out = p.model_dump(mode="json")
+    h = raw.get("reviewed_plan_sha256")
+    if isinstance(h, str) and h.strip():
+        out["reviewed_plan_sha256"] = h.strip()
+    return out
 
 
 @app.post("/plans/{plan_id}/approve")
@@ -682,7 +690,10 @@ async def plans_approve(plan_id: str):
             detail=f"Pending plan {plan_id!r} not found.",
         ) from None
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
     try:
         write_approval(
             plan_id,
@@ -754,16 +765,56 @@ async def plans_reject(plan_id: str, req: PlanRejectRequest):
 async def plans_execute(plan_id: str):
     """
     Plan API — execute an **approved** plan only: load from `data/plans/approved/`,
-    re-check policy, then run each step via `run_installed_tool` (registry + schema + sandbox).
+    verify approved content hash, re-check policy, then run each step via
+    `run_installed_tool` (registry + schema + sandbox).
     Does not call models. Pending or proposed plans are not executable here.
     """
+    if plan_already_executed(plan_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "status": "already_executed",
+                "plan_id": plan_id,
+                "message": "This plan was already executed; re-execution is not allowed.",
+            },
+        )
+
     try:
-        plan = load_plan(plan_id, status="approved")
+        raw_approved = load_plan_storage_dict(plan_id, "approved")
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Plan is not in approved state or was not found under approved plans.",
         ) from None
+
+    stored_hash = raw_approved.get("approved_plan_sha256")
+    if not isinstance(stored_hash, str) or not stored_hash.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": "approval_hash_missing",
+                "plan_id": plan_id,
+                "message": (
+                    "Approved plan is missing approved_plan_sha256; execution refused. "
+                    "Re-approve from a current pending plan with server-owned hashes."
+                ),
+            },
+        )
+
+    if compute_plan_sha256(raw_approved) != stored_hash.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": "plan_hash_mismatch",
+                "plan_id": plan_id,
+                "message": (
+                    "Plan content no longer matches approved_plan_sha256; execution refused."
+                ),
+            },
+        )
+
+    try:
+        plan = storage_dict_to_plan(raw_approved)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
 
