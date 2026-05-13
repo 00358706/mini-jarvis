@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
+from notifications import append_pending_approval_notification
 from plans import Plan, plan_from_dict, plan_to_dict, validate_plan_id
 
 logger = logging.getLogger("gateway.approvals")
@@ -141,6 +142,12 @@ def save_pending_plan(plan: Plan) -> Path:
     text = json.dumps(body, indent=2, default=str)
     path.write_text(text, encoding="utf-8")
     logger.info("approvals | saved pending plan | %s", plan.plan_id)
+    try:
+        append_pending_approval_notification(plan)
+    except Exception:
+        logger.exception(
+            "approvals | pending approval notification append failed | %s", plan.plan_id
+        )
     return path
 
 

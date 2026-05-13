@@ -27,13 +27,15 @@ All protected routes require a valid `X-API-Key` except `GET /health`. **`GATEWA
 | Key env | Purpose |
 |---------|---------|
 | **`GATEWAY_API_KEY`** | **Master** — valid for every protected route (local default and backwards compatibility). |
-| **`GATEWAY_INPUT_API_KEY`** (optional) | **Input / proposal** — `POST /ingest`, `POST /plans/propose`, `POST /plans/from-message` only (not approve/execute/admin). |
-| **`GATEWAY_APPROVAL_API_KEY`** (optional) | **Plan authority** — `POST /plans/{id}/approve`, `reject`, `execute`, plus **read-only** GETs (`/plans/pending`, workspaces, logs, events, tools). Does **not** allow `POST /plans/propose` or registry admin POSTs. |
+| **`GATEWAY_INPUT_API_KEY`** (optional) | **Input / proposal** — `POST /ingest`, `POST /plans/propose`, `POST /plans/from-message`; plus the same **read-only** GETs as the approval tier (plans, workspaces, logs, events, tools, **`GET /notifications/pending-approvals`**). Does **not** allow plan approve/reject/execute or registry admin POSTs. |
+| **`GATEWAY_APPROVAL_API_KEY`** (optional) | **Plan authority** — `POST /plans/{id}/approve`, `reject`, `execute`, plus **read-only** GETs (`/plans/pending`, `/notifications/pending-approvals`, workspaces, logs, events, tools). Does **not** allow `POST /plans/propose` or registry admin POSTs. |
 | **`GATEWAY_ADMIN_API_KEY`** (optional) | **Registry lifecycle** — `POST /tools/propose`, `approve`, `install`, `reject`, plus the same read-only GETs as above. **Approval key never counts as admin.** |
 
 If an optional role key is **unset**, behavior falls back to **master-only** for that tier (same as before role keys existed). If **set**, only **that key** or the **master** key may perform that tier’s actions; a recognized but wrong-tier key receives **`403`** with `route_role` in the JSON body. Unknown or missing keys → **`401`**.
 
----
+### Pending approval notifications (informational only)
+
+When a plan is saved as **pending approval** (`POST /plans/propose` or `POST /plans/from-message` with `requires_approval` and policy allowed), the gateway appends one JSON line to **`data/notifications/pending_approvals.jsonl`** (local append-only log; not a deduplicated inbox — the same `plan_id` re-proposed appends another line). Payloads are **visibility only**: `can_approve` and `can_execute` are always **`false`** in the notification record; they do **not** grant authority. **Approval** still requires **`POST /plans/{plan_id}/approve`** with an approval-capable key and a valid pending **`reviewed_plan_sha256`** (see **`GET /plans/pending/{plan_id}`**). **Execution** still requires **`POST /plans/{plan_id}/execute`** with an approval-capable key and a valid **`approved_plan_sha256`**. **`GET /notifications/pending-approvals`** returns the latest records (default cap **200**), is read-only, and does not call approve, reject, execute, webhooks, or the registry. The file is gitignored (see `.gitignore`); only the directory placeholder may be tracked.
 
 ## Control-plane lanes / chatbar mental model
 
@@ -242,6 +244,7 @@ Current `main.py` routes:
 | `POST` | `/plans/from-message` | deterministic frontend helper that creates a proposed plan; no approval or execution |
 | `GET` | `/plans/pending` | list pending plan ids |
 | `GET` | `/plans/pending/{plan_id}` | read one pending plan (includes `reviewed_plan_sha256` when present) |
+| `GET` | `/notifications/pending-approvals` | read-only: latest pending-approval **informational** notifications (append-only JSONL source); not an approval or execution surface |
 | `POST` | `/plans/{plan_id}/approve` | verify pending hash, set `approved_plan_sha256`, move to approved; no execution |
 | `POST` | `/plans/{plan_id}/reject` | move pending plan to rejected |
 | `POST` | `/plans/{plan_id}/execute` | verify approved content hash, then policy + registry/schema/sandbox; `409` if already executed |
@@ -326,6 +329,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
 - `python scripts/test_policy_approval_unit_tests.py` exercises `evaluate_plan`, `/plans/*` boundaries, ingest gating, and policy-before-execute ordering (stubbed tools).
 - `python scripts/test_approval_role_keys.py` checks optional `GATEWAY_*_API_KEY` role separation vs master `GATEWAY_API_KEY`.
+- `python scripts/test_pending_approval_notifications.py` checks append-only pending-approval notifications, read-only `GET /notifications/pending-approvals`, and role/input vs approve boundaries.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.

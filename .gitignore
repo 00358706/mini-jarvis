@@ -15,6 +15,9 @@ data/*
 !data/plans/
 !data/workspaces/
 !data/registry/
+!data/notifications/
+data/notifications/*.jsonl
+!data/notifications/.gitkeep
 data/registry/*
 !data/registry/.gitkeep
 !data/registry/generated_installed_tools.json

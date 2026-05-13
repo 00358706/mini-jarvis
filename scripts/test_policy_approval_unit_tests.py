@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 import approvals
 import dispatch
 import main
+import notifications
 import policy
 import sandbox
 import tools
@@ -37,6 +38,10 @@ def _use_temp_storage(root: Path) -> None:
     workspace._ACTIVE = workspace._WORKSPACES_ROOT / "active"  # type: ignore[attr-defined]
     workspace._COMPLETED = workspace._WORKSPACES_ROOT / "completed"  # type: ignore[attr-defined]
     workspace._REJECTED = workspace._WORKSPACES_ROOT / "rejected"  # type: ignore[attr-defined]
+    nd = root / "notifications"
+    nd.mkdir(parents=True, exist_ok=True)
+    notifications.NOTIFICATIONS_DIR = nd  # type: ignore[attr-defined]
+    notifications.PENDING_APPROVALS_JSONL = nd / "pending_approvals.jsonl"  # type: ignore[attr-defined]
 
 
 def _plan(
