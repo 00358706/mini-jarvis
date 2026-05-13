@@ -107,8 +107,8 @@ Branch sequence:
    - Purpose: Prevent stale, swapped, or rewritten plan JSON from inheriting approval or executing twice.
    - Hard safety rules: Approval is not portable across plan edits; workspace files remain evidence, not authority; execution fails closed on missing or mismatched hashes before policy/tools/sandbox; no approve+execute shortcut.
 
-3. `policy-approval-unit-tests`
-   - Scope: Add focused tests for policy decisions, approval transitions, and execution preconditions around `/plans/*` and any gated ingest lane.
+3. `policy-approval-unit-tests` (**baseline implemented**)
+   - Scope: Add focused tests for policy decisions, approval transitions, and execution preconditions around `/plans/*` and the gated ingest lane (`scripts/test_policy_approval_unit_tests.py`).
    - Purpose: Lock down the authority boundary before widening generated dispatch or runtime integrations.
    - Hard safety rules: Tests must not call real services, install generated tools, mutate durable registry behavior, or add execution shortcuts.
 
