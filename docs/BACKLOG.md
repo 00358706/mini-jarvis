@@ -119,7 +119,7 @@ Branch sequence:
    - Hard safety rules: Tests must not call real services, install generated tools, mutate durable registry behavior, or add execution shortcuts.
 
 4. `approval-role-keys` (**baseline implemented**)
-   - Scope: Optional `GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY` with route-class checks in `main.py` middleware; `GATEWAY_API_KEY` remains master for all routes.
+   - Scope: Optional `GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY` with route-class checks in `main.py` middleware (`services/auth_roles.py`); `GATEWAY_API_KEY` remains master for all routes.
    - Purpose: Separate “can call the gateway” from approve/execute vs registry admin when operators configure split keys.
    - Hard safety rules: No weaker auth; approval key is not admin; `/health` stays public; no plan or ingest semantic changes.
 
@@ -138,10 +138,10 @@ Branch sequence:
    - Purpose: Reduce accidental bypass of configured service bases by scattering raw HTTP clients across tool code.
    - Hard safety rules: No new real service calls in tests; no `/ingest` or approval/execute semantic changes; no registry mutation behavior change.
 
-8. `fastapi-router-split`
-   - Scope: Split `main.py` routes into focused FastAPI routers/modules after behavior is covered by tests.
-   - Purpose: Reduce coupling between ingest, plans, workspace review, tools lifecycle, and observability without changing route behavior.
-   - Hard safety rules: Preserve endpoint contracts; do not add endpoints; do not weaken auth; no behavior change without explicit tests.
+8. `fastapi-router-split` (**baseline implemented**)
+   - Scope: Split `main.py` HTTP handlers into `routers/` modules; move API-key role rules to `services/auth_roles.py`; plan workspace mirror helpers to `services/workspace_mirror.py`. `main.py` remains the composition root (logging, lifespan, middleware, exception handler, `/health`, `include_router`). **`dispatch.py`** unchanged as ingest lane router.
+   - Purpose: Reduce coupling and file size without changing paths, methods, status codes, response shapes, or role classification (unknown routes remain **`MASTER_ONLY`**).
+   - Hard safety rules: Preserve endpoint contracts; do not add endpoints; do not weaken auth; refactor-only. Tests: `scripts/test_router_split_regression.py` plus existing authority scripts.
 
 9. `plan-step-idempotency-dry-run`
    - Scope: Add plan-step metadata and dry-run/preflight conventions for idempotency, duplicate detection, and side-effect review.
