@@ -170,6 +170,8 @@ Rules:
 
 Design framing: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md` (archives, compaction principles, test cleanup expectations).
 
+**Implemented (read-only reporting only):** `scripts/report_workspace_storage.ps1` with `scripts/test_workspace_storage_report.ps1` — stdout-only size report for a `DataRoot` tree (default repo `data/`), largest-folder ranking, test-looking name hints, and archive-age hints; **no** file writes, deletes, compaction, or runtime behavior changes. `workspace-storage-report` branch scope is reporting-only.
+
 Problem:
 Smoke tests, proposal flows, and review mirrors create many workspace folders. Over time, `data/workspaces/` can become larger than the codebase because it stores redundant copies of plan, policy, result, and review artifacts.
 
@@ -177,7 +179,7 @@ Goal:
 Keep workspaces useful for human review while preventing unbounded storage growth.
 
 Design:
-- Add a read-only workspace storage report.
+- ~~Add a read-only workspace storage report.~~ **Done:** `scripts/report_workspace_storage.ps1` (see above).
 - Show size by state, age, and largest folders.
 - Identify archive candidates without mutating anything.
 - Compact old completed/rejected workspaces into archive folders or zip bundles.
@@ -195,7 +197,7 @@ Rules:
 - Gateway, plan state, registry, policy, approvals, sandbox, and audit remain the authority path.
 
 Suggested branch sequence:
-1. `workspace-storage-report`
+1. `workspace-storage-report` — **implemented** (read-only script + test; no data mutation).
 2. `workspace-archive-candidates`
 3. `workspace-compact-archive`
 4. `test-workspace-retention`

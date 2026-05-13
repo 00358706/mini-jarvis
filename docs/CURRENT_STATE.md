@@ -39,6 +39,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 
 ## Current local review dashboard (client-only)
 - `integrations/local_dashboard/` — static HTML/JS demo UI that uses gateway endpoints only for plan review (no gateway changes) and narrow local automation lab review routes for generating proposal artifacts, listing recent runs from `INDEX.json`, reading `INDEX.json`, and reading indexed artifacts only.
+- **Read-only data storage report:** `scripts/report_workspace_storage.ps1` prints top-level `data/` usage, workspace state sizes, largest directories (default 20), test-looking folder name hints, and age-based archive **hints** (stdout or `-Json`); it does **not** read file contents, write files, delete, compact, or change timestamps. See `docs/AUTHORITY_AND_EVIDENCE_MODEL.md`. **Not a change to gateway or workspace runtime behavior.**
 
 ## Current automation lab (proposal-only)
 - `scripts/automation_lab_propose.ps1` uses `automation_lab.py` to write indexed review artifacts under `data/automation_lab/<request_id>/`. Capability matching is **registry-informed** via read-only `registry.all_tools()` metadata through `automation_lab_registry_read.py` (no lifecycle mutations, no sandbox, no execution). `CAPABILITY_MATCHES.json` uses schema `automation-lab-capability-matches.v3` and records `registry_lookup`, `registry_matches`, deterministic/fixture layers, advisory `score` / `score_breakdown`, `recommended_outcome`, `recommendation_reason`, `precedence_applied`, `conflicts` (when evidence disagrees), `evidence_sources`, and `primary_outcome_source` (registry is preferred over static fixtures when the read-only registry shows a **strong installed** signal; fixture recommendations are preserved, not hidden). Optional static capability fixture lookup via `fixtures/automation_lab/capabilities.json` remains advisory demo/fallback and merges with registry candidates when matched. Optional local-model drafting via `local_model_adapter.py` remains advisory only. `scripts/automation_lab_review.ps1` reads `INDEX.json` and prints a compact review summary without modifying artifacts. `INDEX.json` is review evidence only and marks artifacts as non-authority. The lab does not change `/ingest`, add gateway endpoints, approve/authorize plans, execute tools, call the sandbox worker, install tools, call local models from review, or mutate the registry.
@@ -83,7 +84,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `scripts/test_inspect_file_tool.ps1`
 - `scripts/test_propose_patch_tool.ps1`
 - `scripts/test_project_readonly_tools.ps1`
-- `scripts/test_workspace_review_endpoints.ps1`
+- `scripts/test_workspace_storage_report.ps1`
 - `scripts/test_plans_from_message.ps1`
 - `scripts/test_external_ui_flow.ps1`
 - `scripts/test_openwebui_action_wrapper.ps1`
