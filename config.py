@@ -24,7 +24,12 @@ class _Config:
     # ── Authentication ────────────────────────────────────────────────────────
     # Set a strong random secret here or via environment.
     # All requests must include:  X-API-Key: <value>
+    # GATEWAY_API_KEY is the master key (all routes when present).
+    # Optional role keys restrict lower-privilege clients; see README / CURRENT_STATE.
     api_key: str = os.getenv("GATEWAY_API_KEY", "change-me-before-use")
+    input_api_key: str = os.getenv("GATEWAY_INPUT_API_KEY", "").strip()
+    approval_api_key: str = os.getenv("GATEWAY_APPROVAL_API_KEY", "").strip()
+    admin_api_key: str = os.getenv("GATEWAY_ADMIN_API_KEY", "").strip()
 
     # ── Local LLM (Ollama) ────────────────────────────────────────────────────
     ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")

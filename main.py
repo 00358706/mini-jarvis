@@ -23,7 +23,10 @@ Run:
     uvicorn main:app --host 0.0.0.0 --port 8000
 
 Environment variables (see config.py):
-    GATEWAY_API_KEY       — required; default is 'change-me-before-use'
+    GATEWAY_API_KEY       — master X-API-Key; all routes when present (local default)
+    GATEWAY_INPUT_API_KEY — optional; input/proposal POSTs only (see middleware route map)
+    GATEWAY_APPROVAL_API_KEY — optional; plan approve/reject/execute + explicit read GETs
+    GATEWAY_ADMIN_API_KEY — optional; registry tool lifecycle POSTs + same read GETs
     GATEWAY_HOST          — bind address (default 0.0.0.0)
     GATEWAY_PORT          — bind port (default 8000)
     OLLAMA_URL            — Ollama base URL
@@ -260,8 +263,97 @@ app = FastAPI(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Authentication middleware
+# Authentication middleware (role-separated API keys)
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+def _classify_api_key(provided: str) -> str | None:
+    """
+    Return 'master', 'input', 'approval', 'admin', or None if missing / unrecognized.
+    """
+    p = (provided or "").strip()
+    if not p:
+        return None
+    if p == cfg.api_key:
+        return "master"
+    if cfg.input_api_key and p == cfg.input_api_key:
+        return "input"
+    if cfg.approval_api_key and p == cfg.approval_api_key:
+        return "approval"
+    if cfg.admin_api_key and p == cfg.admin_api_key:
+        return "admin"
+    return None
+
+
+def _route_api_role(method: str, path: str) -> str:
+    """
+    Classify protected routes for API-key role checks.
+    Returns: INPUT_POST | READ_REVIEW | APPROVAL_ACTION | ADMIN_ACTION | MASTER_ONLY
+
+    Unknown or future paths are MASTER_ONLY (fail closed: only master key passes auth).
+    """
+    if method == "POST" and path == "/ingest":
+        return "INPUT_POST"
+    if method == "POST" and path == "/plans/propose":
+        return "INPUT_POST"
+    if method == "POST" and path == "/plans/from-message":
+        return "INPUT_POST"
+    if method == "POST" and re.match(r"^/plans/[^/]+/(approve|reject|execute)$", path):
+        return "APPROVAL_ACTION"
+    if method == "GET" and path == "/plans/pending":
+        return "READ_REVIEW"
+    if method == "GET" and re.match(r"^/plans/pending/[^/]+$", path):
+        return "READ_REVIEW"
+    if method == "GET" and path == "/workspaces":
+        return "READ_REVIEW"
+    if method == "GET" and re.match(
+        r"^/workspaces/(active|completed|rejected)/[^/]+$", path
+    ):
+        return "READ_REVIEW"
+    if method == "GET" and re.match(
+        r"^/workspaces/(active|completed|rejected)/[^/]+/files/[^/]+$", path
+    ):
+        return "READ_REVIEW"
+    if method == "GET" and re.match(
+        r"^/workspaces/(active|completed|rejected)/[^/]+/compact$", path
+    ):
+        return "READ_REVIEW"
+    if method == "GET" and path in ("/logs", "/events", "/tools"):
+        return "READ_REVIEW"
+    if method == "GET" and re.match(r"^/tools/[^/]+/[^/]+$", path):
+        return "READ_REVIEW"
+    if method == "POST" and path in (
+        "/tools/propose",
+        "/tools/approve",
+        "/tools/install",
+        "/tools/reject",
+    ):
+        return "ADMIN_ACTION"
+    return "MASTER_ONLY"
+
+
+def _key_allows_route(*, route_role: str, key_kind: str) -> bool:
+    if key_kind == "master":
+        return True
+    if route_role == "INPUT_POST":
+        return key_kind == "input" and bool(cfg.input_api_key)
+    if route_role == "READ_REVIEW":
+        if key_kind == "input" and cfg.input_api_key:
+            return True
+        if key_kind == "approval" and cfg.approval_api_key:
+            return True
+        if key_kind == "admin" and cfg.admin_api_key:
+            return True
+        return False
+    if route_role == "APPROVAL_ACTION":
+        return key_kind == "master" or (
+            key_kind == "approval" and bool(cfg.approval_api_key)
+        )
+    if route_role == "ADMIN_ACTION":
+        return key_kind == "master" or (key_kind == "admin" and bool(cfg.admin_api_key))
+    if route_role == "MASTER_ONLY":
+        return False
+    return False
 
 
 @app.middleware("http")
@@ -269,12 +361,31 @@ async def require_api_key(request: Request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
     provided = request.headers.get("X-API-Key", "")
-    if provided != cfg.api_key:
+    key_kind = _classify_api_key(provided)
+    if key_kind is None:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={
                 "status": "error",
-                "error": "Invalid or missing X-API-Key header.",
+                "error": (
+                    "Invalid or missing X-API-Key header."
+                    if not (provided or "").strip()
+                    else "Unknown X-API-Key (not a configured gateway key)."
+                ),
+            },
+        )
+    route_role = _route_api_role(request.method, request.url.path)
+    if not _key_allows_route(route_role=route_role, key_kind=key_kind):
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "status": "error",
+                "error": (
+                    f"This X-API-Key is not permitted for {request.method} {request.url.path}. "
+                    f"Required role: {route_role}."
+                ),
+                "route_role": route_role,
+                "key_kind": key_kind,
             },
         )
     return await call_next(request)
