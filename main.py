@@ -4,7 +4,8 @@ main.py — Agentic Gateway, Phase 4
 Phase 4:
   - Single /ingest path with unified GatewayResponse (status, routed_to, result,
     fail_reason, timestamp).
-  - Deterministic Ollama classifier (temp=0); tools run via sandbox subprocess.
+  - Deterministic Ollama classifier (temp=0); LOCAL_TOOLS on /ingest is gated
+    (no direct tool execution). Approved plan execution still uses the sandbox subprocess.
 
 Phase 3 (retained):
   GET  /logs                 — structured audit log (all entries)
@@ -318,8 +319,10 @@ async def health():
 async def ingest(request: IngestRequest):
     """
     Main ingestion endpoint. Authenticated via X-API-Key header.
-    Normalises → classifies → routes → executes → returns structured response.
-    All activity is written to the audit log (queryable via GET /logs).
+    Normalises → classifies → routes → returns structured response.
+    ``LOCAL_TOOLS`` classifications are gated: they do not execute installed tools
+    or invoke the sandbox from this path; use ``/plans/*`` for proposal, explicit
+    approval, and execution. All activity is written to the audit log (GET /logs).
     """
     envelope = await normalise(request)
 

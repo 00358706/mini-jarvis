@@ -3,10 +3,12 @@ dispatch.py — Pipeline orchestrator (Phase 4).
 
 Flow:
   ingest (audited) → classify (Ollama, temperature=0, validated tokens only)
-  → route → execute → failure classification → audit → response
+  → route → branch handler → failure classification → audit → response
 
 Classification uses the local model only (no LoopLM / adapter loops on the hot path).
-Tool execution always goes through sandbox.run() (subprocess isolation).
+Installed tool execution from the gateway uses sandbox.run() (subprocess isolation),
+but ``LOCAL_TOOLS`` on ``/ingest`` is gated: it does not call ``tools.execute`` by
+default; use the plan proposal and ``/plans/*`` approval path for execution.
 """
 
 from __future__ import annotations
@@ -19,9 +21,15 @@ from classification import classify
 from failure_classifier import annotate_result_dict, classify_failure
 from models import NormalisedEnvelope, RoutingTarget
 from routing import route_cloud_llm, route_local_llm
-from tools import execute as tools_execute
 
 logger = logging.getLogger("gateway.dispatch")
+
+_INGEST_LOCAL_TOOLS_GATE_MESSAGE = (
+    "Tool-related request detected. POST /ingest does not execute installed tools "
+    "directly. Create a pending plan (for example POST /plans/from-message where "
+    "supported, or POST /plans/propose with a structured plan), obtain explicit "
+    "approval, then POST /plans/{plan_id}/execute."
+)
 
 
 async def process(envelope: NormalisedEnvelope) -> dict[str, Any]:
@@ -64,46 +72,33 @@ async def process(envelope: NormalisedEnvelope) -> dict[str, Any]:
     match target:
 
         case "LOCAL_TOOLS":
-            tool_result = await tools_execute(envelope)
-            no_intent = tool_result.tool_name == "none" or (
-                tool_result.error and "No matching tool intent" in tool_result.error
-            )
             result: dict[str, Any] = {
                 "routed_to": "LOCAL_TOOLS",
-                "tool": tool_result.tool_name,
-                "success": tool_result.success,
-                "data": tool_result.data,
-                "error": tool_result.error,
-                "sandbox_elapsed": tool_result.sandbox_elapsed,
-                "execution_duration_ms": tool_result.execution_duration_ms,
-                "executed_in_sandbox_worker": tool_result.executed_in_sandbox_worker,
-                "sandbox_timeout": tool_result.sandbox_timeout,
+                "lane": "plan_proposal_required",
+                "tool_executed": False,
+                "sandbox_worker_invoked": False,
+                "approval_required": True,
+                "message": _INGEST_LOCAL_TOOLS_GATE_MESSAGE,
             }
             fail = classify_failure(
                 routed_to="LOCAL_TOOLS",
-                tool_name=tool_result.tool_name,
-                tool_success=tool_result.success,
-                tool_error=tool_result.error,
-                no_matching_tool_intent=no_intent,
+                ingest_tool_execution_gated=True,
             )
             result = annotate_result_dict(result, fail)
 
             await audit.append(
-                kind="tool",
+                kind="route",
                 input_summary=input_summary,
                 decision=target,
                 route="LOCAL_TOOLS",
-                tool=tool_result.tool_name,
-                result_summary=(
-                    str(tool_result.data)[:200] if tool_result.success else None
-                ),
-                error=tool_result.error,
+                result_summary="Ingest tool execution gated; plan/approval flow required.",
                 metadata={
                     **base_meta,
                     "failure_reason": fail,
-                    "tool_execution_duration_ms": tool_result.execution_duration_ms,
-                    "tool_executed_in_sandbox_worker": tool_result.executed_in_sandbox_worker,
-                    "tool_sandbox_timeout": tool_result.sandbox_timeout,
+                    "gate": "ingest_tool_execution_disabled",
+                    "tool_executed": False,
+                    "sandbox_worker_invoked": False,
+                    "approval_required": True,
                 },
             )
             return result

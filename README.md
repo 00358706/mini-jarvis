@@ -1,6 +1,6 @@
 # mini-jarvis (Agentic Gateway)
 
-A small **local-first control plane** for safe agentic workflows. It has a runtime gateway for normal installed-capability requests, a plan/policy/approval path for reviewed work, proposal-only authoring lanes for future capabilities, and a sandboxed execution boundary for installed tools. It targets a homelab stack (Radarr, Sonarr, SABnzbd) plus local project-maintenance workflows with structured responses and an audit trail.
+A small **local-first control plane** for safe agentic workflows. It has a gateway for multimodal **input and routing**, a plan/policy/approval path for reviewed work, proposal-only authoring lanes for future capabilities, and a sandboxed execution boundary for installed tools. It targets a homelab stack (Radarr, Sonarr, SABnzbd) plus local project-maintenance workflows with structured responses and an audit trail.
 
 ---
 
@@ -9,20 +9,20 @@ A small **local-first control plane** for safe agentic workflows. It has a runti
 Mini-Jarvis is currently an **execution-isolated gateway** with a **plan/policy/approval layer**, **agents as configuration only**, and a proposal-only **Automation Lab** for capability authoring. The gateway owns validation, registry checks, policy, approval state, and execution; `agents/` holds human-readable workflow configuration and does not run tools or touch the network.
 
 Implemented pieces include:
-- `POST /ingest` for the installed-tool/runtime lane.
-- `/plans/*` for proposal, review, explicit approval, and explicit execution.
+- `POST /ingest` as the multimodal **input surface** and classifier router (including a gated `LOCAL_TOOLS` hint that does **not** execute tools by default).
+- `/plans/*` for proposal, review, explicit approval, and explicit execution of installed tools.
 - Readable plan workspaces under `data/workspaces/` as evidence only.
 - Automation Lab proposal artifacts under `data/automation_lab/<request_id>/`.
 - Registry-informed, read-only capability lookup and deterministic scoring for review.
 - Tool build workspaces and review-only candidate generation under `data/tool_builds/<request_id>/`, including hardening that rejects unsafe build indexes and rolls back partial candidate output.
 
-`dispatch.process()` is unchanged for now.
+`dispatch.process()` gates `LOCAL_TOOLS` on ingest: it returns a plan-required response and audit metadata instead of calling `tools.execute`.
 
 ---
 
 ## Control-plane lanes / chatbar mental model
 
-`/ingest` remains the runtime/multimodal gateway lane for normal installed-capability requests. It is not the whole future control plane.
+`/ingest` remains the primary multimodal **input envelope** surface (text, voice, image, event). It classifies into routing targets but must not treat classifier output as execution permission for installed tools.
 
 A future chatbar, channel, or event surface should route internally to explicit lanes:
 - Existing capability/runtime request.
@@ -37,7 +37,7 @@ Automation Lab remains proposal/review-only. It must not execute tools, install 
 
 ## Runtime pipeline (`POST /ingest`)
 
-End-to-end flow for the installed-tool/runtime lane:
+End-to-end flow:
 
 ```
 POST /ingest
@@ -58,34 +58,17 @@ POST /ingest
 │  (audit ingest → classify → route branch → audit → response) │
 └──────┬────────────────────────────────────────────────────────┘
        │
-       │  LOCAL_TOOLS branch
-       ▼
-┌─────────────┐
-│   tools     │  intent → registry lookup (installed only) →
-└──────┬──────┘  validate_args_against_schema (registry input_schema)
+       ├── LOCAL_TOOLS → gated response (plan_proposal_required);
+       │                   no tools.execute, no sandbox on this path
        │
-       ▼
-┌─────────────┐
-│  sandbox    │  sandbox.run() — subprocess spawn, timeout, restricted env
-└──────┬──────┘
+       ├── LOCAL_LLM / CLOUD_LLM → LLM routing branches
        │
-       ▼
-┌──────────────────┐
-│ sandbox_worker   │  stdin JSON → run_tool_by_name() in child process
-└──────┬───────────┘
-       │
-       ▼
-┌──────────────────┐
-│  tool execution  │  httpx to configured services (after http_allowlist check)
-└──────┬───────────┘
-       │
-       ▼
-┌─────────────┐
-│    audit    │  append structured entries (ingest, tool, lifecycle, …)
-└─────────────┘
+       └── DROP → safe refusal
 ```
 
-Other routing targets (`LOCAL_LLM`, `CLOUD_LLM`, `DROP`) skip the tool registry and sandbox; they still go through `dispatch` and are audited where applicable. This diagram describes the runtime lane, not the whole future control-plane workflow.
+**Approved execution** of installed tools uses `POST /plans/{plan_id}/execute` after policy checks and explicit human approval — registry lookup, schema validation, `sandbox.run()`, and `sandbox_worker` apply there, not on `/ingest` for `LOCAL_TOOLS`.
+
+Other routing targets (`LOCAL_LLM`, `CLOUD_LLM`, `DROP`) skip tool execution; they still go through `dispatch` and are audited where applicable. A future policy-gated read-only runtime lane on ingest is out of scope until explicitly designed.
 
 ---
 
@@ -293,7 +276,7 @@ Replace `your-secret-key` with `GATEWAY_API_KEY` from `.env`.
 curl http://localhost:8000/health
 ```
 
-**2. Ingest — local tool path** (classifier must route to `LOCAL_TOOLS`; example text matches Radarr intent):
+**2. Ingest — tool-intent hint** (when the classifier routes to `LOCAL_TOOLS`, for example Radarr-like text, the gateway returns a **gated** response: `lane: plan_proposal_required`, no tool execution, no sandbox; use `/plans/*` for execution):
 
 ```bash
 curl -X POST http://localhost:8000/ingest \
@@ -321,6 +304,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `powershell -ExecutionPolicy Bypass -File .\scripts\test_external_ui_flow.ps1` simulates a safe external UI/client flow through proposal, review, explicit approval, explicit execution, and completed result review.
 - On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
 - `python scripts/test_plans_from_message_no_execute.py` is a local regression test that fails if `/plans/from-message` crosses into tool execution.
+- `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.
