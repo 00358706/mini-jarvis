@@ -112,10 +112,10 @@ Branch sequence:
    - Purpose: Lock down the authority boundary before widening generated dispatch or runtime integrations.
    - Hard safety rules: Tests must not call real services, install generated tools, mutate durable registry behavior, or add execution shortcuts.
 
-4. `approval-role-keys`
-   - Scope: Design and implement distinct local operator/role key handling for approval-capable actions, separate from ordinary API access if needed.
-   - Purpose: Make "can call the gateway" different from "can approve execution" where policy requires that distinction.
-   - Hard safety rules: Existing API auth remains required; no weaker fallback approval path; no stored secrets in repo; role checks must fail closed.
+4. `approval-role-keys` (**baseline implemented**)
+   - Scope: Optional `GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY` with route-class checks in `main.py` middleware; `GATEWAY_API_KEY` remains master for all routes.
+   - Purpose: Separate “can call the gateway” from approve/execute vs registry admin when operators configure split keys.
+   - Hard safety rules: No weaker auth; approval key is not admin; `/health` stays public; no plan or ingest semantic changes.
 
 5. `pending-approval-notifications`
    - Scope: Add notification or listing hooks for pending approvals without changing approval or execution semantics.

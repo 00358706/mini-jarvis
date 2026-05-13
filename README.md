@@ -20,6 +20,21 @@ Implemented pieces include:
 
 ---
 
+## API authentication (role keys)
+
+All protected routes require a valid `X-API-Key` except `GET /health`. **`GATEWAY_API_KEY`** is the **master** key and works for every classified route. Optional **`GATEWAY_INPUT_API_KEY`**, **`GATEWAY_APPROVAL_API_KEY`**, and **`GATEWAY_ADMIN_API_KEY`** narrow what each key may call; when a role key is set, it cannot perform higher-authority actions (**`403`**). HTTP paths that are **not** explicitly allowlisted for role keys are treated as **master-only** (unknown or future routes stay fail-closed).
+
+| Key env | Purpose |
+|---------|---------|
+| **`GATEWAY_API_KEY`** | **Master** — valid for every protected route (local default and backwards compatibility). |
+| **`GATEWAY_INPUT_API_KEY`** (optional) | **Input / proposal** — `POST /ingest`, `POST /plans/propose`, `POST /plans/from-message` only (not approve/execute/admin). |
+| **`GATEWAY_APPROVAL_API_KEY`** (optional) | **Plan authority** — `POST /plans/{id}/approve`, `reject`, `execute`, plus **read-only** GETs (`/plans/pending`, workspaces, logs, events, tools). Does **not** allow `POST /plans/propose` or registry admin POSTs. |
+| **`GATEWAY_ADMIN_API_KEY`** (optional) | **Registry lifecycle** — `POST /tools/propose`, `approve`, `install`, `reject`, plus the same read-only GETs as above. **Approval key never counts as admin.** |
+
+If an optional role key is **unset**, behavior falls back to **master-only** for that tier (same as before role keys existed). If **set**, only **that key** or the **master** key may perform that tier’s actions; a recognized but wrong-tier key receives **`403`** with `route_role` in the JSON body. Unknown or missing keys → **`401`**.
+
+---
+
 ## Control-plane lanes / chatbar mental model
 
 `/ingest` remains the primary multimodal **input envelope** surface (text, voice, image, event). It classifies into routing targets but must not treat classifier output as execution permission for installed tools.
@@ -250,7 +265,10 @@ Current `main.py` routes:
 |----------|---------|
 | `GATEWAY_HOST` | Bind address; default `0.0.0.0` |
 | `GATEWAY_PORT` | Listen port; default `8000` |
-| `GATEWAY_API_KEY` | Required `X-API-Key` value for authenticated routes |
+| `GATEWAY_API_KEY` | Master `X-API-Key` for all routes; use strong random value in production |
+| `GATEWAY_INPUT_API_KEY` | (Optional) Input/proposal-only client key — see **API authentication** above |
+| `GATEWAY_APPROVAL_API_KEY` | (Optional) Plan approve/reject/execute + listed read-only GETs |
+| `GATEWAY_ADMIN_API_KEY` | (Optional) Registry tool lifecycle POSTs + same read-only GETs |
 | `OLLAMA_URL` | Ollama base URL |
 | `CLASSIFIER_MODEL` | Model for intent classification |
 | `LOCAL_LLM_MODEL` | Model for `LOCAL_LLM` responses |
@@ -306,6 +324,8 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `python scripts/test_plans_from_message_no_execute.py` is a local regression test that fails if `/plans/from-message` crosses into tool execution.
 - `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
+- `python scripts/test_policy_approval_unit_tests.py` exercises `evaluate_plan`, `/plans/*` boundaries, ingest gating, and policy-before-execute ordering (stubbed tools).
+- `python scripts/test_approval_role_keys.py` checks optional `GATEWAY_*_API_KEY` role separation vs master `GATEWAY_API_KEY`.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.
@@ -401,7 +421,7 @@ Approval and execution remain via the gateway endpoints and wrappers.
 
 ## Security invariants
 
-- Every route except **`/health`** requires a valid **`X-API-Key`** header matching `GATEWAY_API_KEY`.
+- Every route except **`/health`** requires a valid **`X-API-Key`**. **`GATEWAY_API_KEY`** is the **master** key (all routes). Optional role keys restrict clients by route class; keys that are valid but insufficient for a path receive **`403`**. Paths outside the explicit role allowlist are **master-only** (fail closed for future routes).
 - The classifier is constrained to an **allowlist of routing tokens**; free-form model output is not executed as code or routing.
 - Tools run only if they appear in the registry with **`installed`** status; arguments are checked against the registry **`input_schema`** before the sandbox runs.
 - **Tool execution** goes through **`sandbox.run()` → `sandbox_worker`** only; the gateway does not call tool coroutines directly on the ingest path.
