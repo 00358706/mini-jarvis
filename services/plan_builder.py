@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
-from plans import Plan, PlanLimits, PlanStep
+from plans import Plan, PlanLimits, PlanStep, StepSafety
 
 MAINTAINER_AGENT: Final[str] = "project_maintainer_agent"
 MEDIA_AGENT: Final[str] = "media_agent"
@@ -72,6 +72,17 @@ def extract_simple_filename(message: str) -> str | None:
     return token
 
 
+def _read_only_safety() -> StepSafety:
+    """Deterministic builder metadata for lookup/read steps (evidence only; not enforced at execute)."""
+    return StepSafety(
+        dry_run=False,
+        idempotent=True,
+        idempotency_scope="read-only",
+        rollback_notes="No state mutation expected.",
+        compensation_implemented=False,
+    )
+
+
 def _base_plan(*, plan_id: str, agent: str, summary: str, tool: str, args: dict, desc: str) -> Plan:
     return Plan(
         plan_id=plan_id,
@@ -79,7 +90,15 @@ def _base_plan(*, plan_id: str, agent: str, summary: str, tool: str, args: dict,
         agent=agent,
         risk="level_0",
         requires_approval=True,
-        steps=[PlanStep(step_id="step_1", tool=tool, args=args, description=desc)],
+        steps=[
+            PlanStep(
+                step_id="step_1",
+                tool=tool,
+                args=args,
+                description=desc,
+                safety=_read_only_safety(),
+            )
+        ],
         limits=PlanLimits(
             max_tool_calls=6,
             max_runtime_seconds=90,

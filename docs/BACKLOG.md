@@ -18,6 +18,12 @@ No single “next branch” is recommended right now. Pick a backlog item explic
 
 ## Near-term backlog
 
+### Plan step safety / idempotency metadata (implemented on branch)
+
+**Done:** `plans.StepSafety` nested under `PlanStep.safety` with evidence-oriented fields (`dry_run`, idempotency key/scope, `compensation`, `compensation_implemented`, `rollback_notes`). Pydantic enforces non-empty `compensation` when `compensation_implemented` is true. **`dry_run` is metadata only** — `POST /plans/{id}/execute` does not branch on it; no automatic compensation or rollback execution. Deterministic `/plans/from-message` steps populate read-only defaults. `GET .../workspaces/.../compact` echoes `safety` when present in `PLAN.json`. Regression: `python scripts/test_plan_step_idempotency_dry_run.py`.
+
+**Later (separate branch):** optional runtime dry-run mode that skips or simulates tool calls based on `safety.dry_run`, without weakening approval hashes or policy.
+
 ### Tool proposal schema later
 
 Structured tool proposal artifacts should follow `docs/TOOL_PROPOSAL_SCHEMA.md` before any generated-tool, registry lifecycle, or runtime work.

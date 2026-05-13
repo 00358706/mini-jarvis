@@ -10,7 +10,7 @@ import secrets
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Types
@@ -66,11 +66,41 @@ def validate_plan_id(plan_id: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+class StepSafety(BaseModel):
+    """
+    Evidence-only step metadata for review (idempotency, dry-run intent, rollback notes).
+
+    The gateway does not execute compensation, rollback, or dry-run branches from
+    these fields in the current implementation; they document intent and review context.
+    """
+
+    dry_run: bool = False
+    idempotent: bool = False
+    idempotency_key: str | None = None
+    idempotency_scope: str | None = None
+    compensation: str | None = None
+    compensation_implemented: bool = False
+    rollback_notes: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="after")
+    def _compensation_required_when_implemented(self) -> StepSafety:
+        if self.compensation_implemented:
+            c = self.compensation
+            if not (isinstance(c, str) and c.strip()):
+                raise ValueError(
+                    "compensation must be non-empty when compensation_implemented is true"
+                )
+        return self
+
+
 class PlanStep(BaseModel):
     step_id: str
     tool: str
     args: dict[str, Any] = Field(default_factory=dict)
     description: str = ""
+    safety: StepSafety = Field(default_factory=StepSafety)
 
     model_config = ConfigDict(extra="ignore")
 

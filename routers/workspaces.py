@@ -126,14 +126,16 @@ async def workspace_compact_summary_endpoint(state: str, task_id: str):
             description = s.get("description")
             if not isinstance(tool, str):
                 continue
-            steps.append(
-                {
-                    "step_id": str(step_id) if isinstance(step_id, str) else "",
-                    "tool": tool,
-                    "args": args if isinstance(args, dict) else {},
-                    "description": str(description) if isinstance(description, str) else "",
-                }
-            )
+            step_entry: dict[str, Any] = {
+                "step_id": str(step_id) if isinstance(step_id, str) else "",
+                "tool": tool,
+                "args": args if isinstance(args, dict) else {},
+                "description": str(description) if isinstance(description, str) else "",
+            }
+            safety_raw = s.get("safety")
+            if isinstance(safety_raw, dict):
+                step_entry["safety"] = safety_raw
+            steps.append(step_entry)
 
     result_text = ws.get("result_text")
     result_present = isinstance(result_text, str) and bool(result_text.strip())
