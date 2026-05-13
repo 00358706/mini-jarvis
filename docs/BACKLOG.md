@@ -69,6 +69,12 @@ Safe first branch:
 
 **Still later:** callable wiring for generated tools (dispatch in `tools.py` or equivalent) and any execution path; execution still requires the normal plan/policy/approval/registry/schema/sandbox path.
 
+### Centralized tool HTTP client (static guard)
+
+**Implemented:** `tools_http.py` is the only module on the tool execution surface (`tools.py`, `sandbox.py`, `sandbox_worker.py`, optional future `tools/` package) that imports `httpx`. Built-in tools keep calling `http_allowlist.validate_http_destination` before requests.
+
+**Still later:** optional enforcement of registry-declared HTTP allowlists, shared timeouts, and audit metadata inside `tools_http` (or equivalent), without weakening plan/policy/approval boundaries.
+
 ### Gateway authority hardening later
 
 Problem:
@@ -127,10 +133,10 @@ Branch sequence:
    - Purpose: Give lane-gated inputs a consistent way to become reviewable plan proposals without execution.
    - Hard safety rules: Plan building is proposal-only; it must not approve, execute, install tools, invent uninstalled tools, call real services in tests, or bypass policy/registry checks; `/ingest` stays gated.
 
-7. `tool-http-allowlist-guard`
-   - Scope: Harden tests and guardrails around per-tool HTTP destination validation for configured service base URLs.
-   - Purpose: Ensure any future runtime lane continues to prevent accidental or buggy calls outside configured service scopes.
-   - Hard safety rules: No new real service calls in tests; no broad network allowlists; validation must fail closed.
+7. `tool-http-allowlist-guard` (**baseline implemented**)
+   - Scope: `tools_http.py` centralizes `httpx` for the tool execution surface; `scripts/test_tool_http_allowlist_guard.py` statically forbids direct `requests` / `httpx` / `aiohttp` / `urllib.request` usage in `tools.py`, `sandbox.py`, `sandbox_worker.py`, and optional `tools/**/*.py`. Built-in tools still call `http_allowlist.validate_http_destination` before outbound calls. This is a **lint-style guard**, not OS-level sandboxing; registry-wide HTTP policy inside the helper remains future work.
+   - Purpose: Reduce accidental bypass of configured service bases by scattering raw HTTP clients across tool code.
+   - Hard safety rules: No new real service calls in tests; no `/ingest` or approval/execute semantic changes; no registry mutation behavior change.
 
 8. `fastapi-router-split`
    - Scope: Split `main.py` routes into focused FastAPI routers/modules after behavior is covered by tests.

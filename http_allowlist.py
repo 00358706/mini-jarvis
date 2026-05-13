@@ -1,9 +1,11 @@
 """
 http_allowlist.py — Tool-layer HTTP destination policy.
 
-Before httpx calls in built-in tools, verify the full request URL is under the
-approved base URL from configuration (e.g. RADARR_URL). This does not replace
-OS-level network isolation; it limits accidental or buggy calls to wrong hosts.
+Before HTTP calls from built-in tools, verify the full request URL is under the
+approved base URL from configuration (e.g. RADARR_URL). Tool code should perform
+HTTP I/O only through :mod:`tools_http` so static guards can detect stray clients.
+This does not replace OS-level network isolation; it limits accidental or buggy
+calls to wrong hosts.
 """
 
 from __future__ import annotations
