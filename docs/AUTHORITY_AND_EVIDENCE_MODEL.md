@@ -106,7 +106,7 @@ Order may change when implementation starts; dependencies should be respected.
 1. **`workspace-storage-report`** — **implemented:** `scripts/report_workspace_storage.ps1` (read-only stdout report; no mutation).
 2. **`authority-evidence-config-schema`** — schemas/docs for durable authority vs audit record fields.
 3. **`slim-workspace-mode`** — optional runtime path: compact records by default where policy allows.
-4. **`workspace-archive-candidates`** — identify archivable trees; still no silent delete.
+4. **`workspace-archive-candidates`** — **implemented (read-only):** `scripts/report_workspace_archive_candidates.ps1` lists candidate paths for human review later; still **no** archive/delete without explicit confirmation on a future branch.
 5. **`workspace-compact-archive`** — explicit confirmation workflows for archive/compact.
 6. **`routine-proposal-runtime`** — routines create proposal/review artifacts only.
 7. **`scheduled-routine-proposal`** — scheduler as trigger into proposal lane.

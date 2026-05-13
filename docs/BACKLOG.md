@@ -172,6 +172,8 @@ Design framing: `docs/AUTHORITY_AND_EVIDENCE_MODEL.md` (archives, compaction pri
 
 **Implemented (read-only reporting only):** `scripts/report_workspace_storage.ps1` with `scripts/test_workspace_storage_report.ps1` — stdout-only size report for a `DataRoot` tree (default repo `data/`), largest-folder ranking, test-looking name hints, and archive-age hints; **no** file writes, deletes, compaction, or runtime behavior changes. `workspace-storage-report` branch scope is reporting-only.
 
+**Implemented (read-only archive candidates):** `scripts/report_workspace_archive_candidates.ps1` with `scripts/test_workspace_archive_candidates.ps1` — merged candidate list (age and/or test-artifact naming), sorted oldest-first then by size, capped by `-Top`; active workspaces excluded by default and listed as **review-only** when `-IncludeActive` is set; **no** mutation. `workspace-archive-candidates` branch scope is reporting-only.
+
 Problem:
 Smoke tests, proposal flows, and review mirrors create many workspace folders. Over time, `data/workspaces/` can become larger than the codebase because it stores redundant copies of plan, policy, result, and review artifacts.
 
@@ -180,8 +182,8 @@ Keep workspaces useful for human review while preventing unbounded storage growt
 
 Design:
 - ~~Add a read-only workspace storage report.~~ **Done:** `scripts/report_workspace_storage.ps1` (see above).
+- ~~Identify archive candidates without mutating anything.~~ **Done:** `scripts/report_workspace_archive_candidates.ps1` (read-only merged candidate list; see above).
 - Show size by state, age, and largest folders.
-- Identify archive candidates without mutating anything.
 - Compact old completed/rejected workspaces into archive folders or zip bundles.
 - Preserve `WORKSPACE_SUMMARY.md`, `INDEX.json`, hashes, and audit references.
 - Keep active workspaces untouched.
@@ -198,7 +200,7 @@ Rules:
 
 Suggested branch sequence:
 1. `workspace-storage-report` — **implemented** (read-only script + test; no data mutation).
-2. `workspace-archive-candidates`
+2. `workspace-archive-candidates` — **implemented** (read-only candidate list + test; no data mutation).
 3. `workspace-compact-archive`
 4. `test-workspace-retention`
 
