@@ -241,7 +241,7 @@ Current `main.py` routes:
 | `GET` | `/health` | unauthenticated health/status |
 | `POST` | `/ingest` | normalise, classify, route, and return a gateway response |
 | `POST` | `/plans/propose` | policy-check and store pending plan with server `reviewed_plan_sha256`; strips client hash fields; no execution |
-| `POST` | `/plans/from-message` | deterministic frontend helper that creates a proposed plan; no approval or execution |
+| `POST` | `/plans/from-message` | deterministic plan builder (`services/plan_builder.py`) → `POST /plans/propose`; supports `project_maintainer_agent` and `media_agent`; **400** `missing_capability` when no installed tool matches; no approval or execution |
 | `GET` | `/plans/pending` | list pending plan ids |
 | `GET` | `/plans/pending/{plan_id}` | read one pending plan (includes `reviewed_plan_sha256` when present) |
 | `GET` | `/notifications/pending-approvals` | read-only: latest pending-approval **informational** notifications (append-only JSONL source); not an approval or execution surface |
@@ -329,7 +329,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
 - `python scripts/test_policy_approval_unit_tests.py` exercises `evaluate_plan`, `/plans/*` boundaries, ingest gating, and policy-before-execute ordering (stubbed tools).
 - `python scripts/test_approval_role_keys.py` checks optional `GATEWAY_*_API_KEY` role separation vs master `GATEWAY_API_KEY`.
-- `python scripts/test_pending_approval_notifications.py` checks append-only pending-approval notifications, read-only `GET /notifications/pending-approvals`, and role/input vs approve boundaries.
+- `python scripts/test_plan_builder_generalization.py` exercises generalized `/plans/from-message` (maintainer + media + missing capability + roles) without tool/sandbox/registry side effects.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.
@@ -344,9 +344,12 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 
 ### `POST /plans/from-message` (frontend convenience)
 Convenience endpoint for Open WebUI or other local frontends to **create a proposed plan from a user message**.
-It is deterministic (rule-based), does **not** approve plans, and does **not** execute tools.
+It uses **`services/plan_builder.py`** (deterministic, rule-based): allowlisted agents only, registry **installed** tool names as capability truth (no invented tools). It does **not** approve plans, execute tools, call the sandbox, or mutate the registry.
 
-- `POST /plans/from-message` — builds a single-step plan and routes it through the same policy/workspace mirror as `POST /plans/propose`.
+- **Supported agents:** `project_maintainer_agent` (repository list/search/inspect paths, unchanged intent) and `media_agent` (safe mappings such as movie/series search and SABnzbd queue when the corresponding tools are **installed**).
+- **Missing capability:** requests such as Navidrome album browsing with no installed handler return **400** JSON with `status: "missing_capability"`, `proposal_needed: true`, and a hint toward Automation Lab / explicit tool work — **no** pending plan and **no** notification append.
+- **Unsupported agent:** **400** with FastAPI `detail` (same shape as before for unknown agents).
+- Successful builds route through **`POST /plans/propose`** (policy, workspace mirror, pending + notification as today).
 
 ### Workspace Review API
 Read-only endpoints for inspecting `data/workspaces/*` planning state (protected by `X-API-Key`).

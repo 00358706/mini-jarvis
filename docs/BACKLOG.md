@@ -122,10 +122,10 @@ Branch sequence:
    - Purpose: Improve operator visibility while keeping human review explicit.
    - Hard safety rules: Notifications must be informational only; no approve/reject/execute side effects from notification delivery; no auto-approval; no webhooks/scheduler/MCP; JSONL lines are not deduplicated (re-propose appends).
 
-6. `plan-builder-generalization`
-   - Scope: Generalize deterministic request-to-plan construction beyond the current `/plans/from-message` helper and agent-specific cases.
-   - Purpose: Give lane-gated inputs a consistent way to become reviewable plan proposals.
-   - Hard safety rules: Plan building is proposal-only; it must not approve, execute, install tools, or bypass policy/registry checks.
+6. `plan-builder-generalization` (**baseline implemented**)
+   - Scope: `services/plan_builder.py` deterministic NL→Plan for `POST /plans/from-message` (maintainer preserved; `media_agent` for installed Radarr/Sonarr/SABnzbd search/queue mappings; `missing_capability` when no installed tool). Tests: `scripts/test_plan_builder_generalization.py`.
+   - Purpose: Give lane-gated inputs a consistent way to become reviewable plan proposals without execution.
+   - Hard safety rules: Plan building is proposal-only; it must not approve, execute, install tools, invent uninstalled tools, call real services in tests, or bypass policy/registry checks; `/ingest` stays gated.
 
 7. `tool-http-allowlist-guard`
    - Scope: Harden tests and guardrails around per-tool HTTP destination validation for configured service base URLs.

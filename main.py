@@ -99,6 +99,11 @@ from models import (
 )
 from plans import Plan, PlanLimits, PlanStep, create_plan_id, validate_plan_id
 from policy import evaluate_plan
+from services.plan_builder import (
+    BuildMissingCapability,
+    BuildUnsupportedAgent,
+    build_plan_from_message,
+)
 from tools import run_installed_tool
 from workspace import (
     append_execution_log,
@@ -616,96 +621,11 @@ async def plans_propose(plan: Plan):
     }
 
 
-def _extract_simple_filename(message: str) -> str | None:
-    """
-    Extract a simple repo-relative filename token like README.md from message.
-    Rejects separators to avoid paths in this first version.
-    """
-    m = re.search(r"(?i)\b([A-Z0-9][A-Z0-9_.-]{0,127}\.[A-Z0-9]{1,8})\b", message)
-    if not m:
-        return None
-    token = m.group(1).strip()
-    if "/" in token or "\\" in token:
-        return None
-    return token
-
-
-def _build_project_maintainer_plan_from_message(
-    *,
-    message: str,
-    agent: str,
-    plan_id: str,
-) -> Plan:
-    """
-    Deterministic first version (no LLM planner): build a single-step Plan.
-    """
-    msg = (message or "").strip()
-    msg_l = msg.lower()
-
-    tool = "list_project_files"
-    args: dict = {"root": ".", "max_results": 200}
-    desc = "List repository files (safe discovery)."
-
-    # Explicitly ignore attempts to request non-maintainer tools.
-    if "radarr_search" in msg_l or "radarr" in msg_l or "sonarr" in msg_l or "sabnzbd" in msg_l:
-        tool = "list_project_files"
-        args = {"root": ".", "max_results": 200}
-        desc = "Safe fallback: list repository files (maintainer tools only)."
-    elif ("search" in msg_l) or ("find references" in msg_l) or ("find reference" in msg_l):
-        tool = "search_repo"
-        query = None
-        # Prefer extracting a token after "for", e.g. "search repo for PATCH_PROPOSAL.md"
-        mm = re.search(r"(?i)\bfor\s+['\"]?([A-Z0-9_.-]{1,200})['\"]?\b", msg)
-        if mm:
-            query = mm.group(1).strip()
-        if not query:
-            # Fall back to a short query derived from the message.
-            query = msg[:200]
-        args = {"query": query, "root": ".", "max_results": 50, "max_file_size_bytes": 100000}
-        desc = "Literal search over repository text files."
-    elif ("list files" in msg_l) or ("show files" in msg_l) or ("list project files" in msg_l):
-        tool = "list_project_files"
-        args = {"root": ".", "max_results": 200}
-        desc = "List repository files."
-    elif ("inspect" in msg_l) or ("read file" in msg_l) or ("read " in msg_l):
-        fn = _extract_simple_filename(msg)
-        if fn:
-            tool = "inspect_file"
-            args = {"path": fn}
-            desc = "Read a repository file for review."
-        else:
-            tool = "list_project_files"
-            args = {"root": ".", "max_results": 200}
-            desc = "Safe fallback: list repository files (no filename detected)."
-
-    summary = msg if msg else "Plan proposed from message."
-    if len(summary) > 200:
-        summary = summary[:200] + "…"
-
-    return Plan(
-        plan_id=plan_id,
-        summary=summary,
-        agent=agent,
-        risk="level_0",
-        requires_approval=True,
-        steps=[
-            PlanStep(step_id="step_1", tool=tool, args=args, description=desc),
-        ],
-        limits=PlanLimits(
-            max_tool_calls=6,
-            max_runtime_seconds=90,
-            allow_cloud=False,
-            allow_delete=False,
-        ),
-        status="proposed",
-    )
-
-
 @app.post("/plans/from-message")
 async def plans_from_message(req: PlanFromMessageRequest):
     """
     Frontend convenience endpoint for proposal creation only.
-    Builds a deterministic single-step plan and routes through /plans/propose logic.
+    Uses services.plan_builder (deterministic); on success routes through /plans/propose logic.
     Does not execute tools or approve plans.
     """
     agent = (req.agent or "").strip()
@@ -721,16 +641,29 @@ async def plans_from_message(req: PlanFromMessageRequest):
     if not message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="message is required.")
 
-    if agent == "project_maintainer_agent":
-        plan = _build_project_maintainer_plan_from_message(
-            message=message, agent=agent, plan_id=plan_id
+    built = build_plan_from_message(
+        message=message,
+        agent=agent,
+        plan_id=plan_id,
+        installed_tool_names=_installed_tool_names(),
+    )
+    if isinstance(built, BuildUnsupportedAgent):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=built.detail)
+    elif isinstance(built, BuildMissingCapability):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "status": "missing_capability",
+                "reason": built.reason_code,
+                "detail": built.detail,
+                "hint": built.hint,
+                "proposal_needed": built.proposal_needed,
+                "agent": agent,
+                "plan_id": plan_id,
+            },
         )
     else:
-        # Minimal first version: do not guess tools for unknown agents.
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported agent for /plans/from-message: {agent!r}",
-        )
+        plan = built.plan
 
     resp = await plans_propose(plan)
     if isinstance(resp, JSONResponse):
