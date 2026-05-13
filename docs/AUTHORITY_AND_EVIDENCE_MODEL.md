@@ -103,7 +103,7 @@ Metadata install and dry-run remain **non-executing** evidence unless and until 
 
 Order may change when implementation starts; dependencies should be respected.
 
-1. **`workspace-storage-report`** — read-only size/candidate reporting (no mutation).
+1. **`workspace-storage-report`** — **implemented:** `scripts/report_workspace_storage.ps1` (read-only stdout report; no mutation).
 2. **`authority-evidence-config-schema`** — schemas/docs for durable authority vs audit record fields.
 3. **`slim-workspace-mode`** — optional runtime path: compact records by default where policy allows.
 4. **`workspace-archive-candidates`** — identify archivable trees; still no silent delete.
