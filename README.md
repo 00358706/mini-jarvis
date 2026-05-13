@@ -158,7 +158,10 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 
 | Module | Role |
 |--------|------|
-| `main.py` | FastAPI app, auth, `/ingest`, `/plans/*`, `/health`, `/logs`, `/tools`, lifecycle endpoints |
+| `main.py` | Composes `FastAPI` app: logging, lifespan, auth middleware, global exception handler, **`GET /health`**, `include_router` for `routers/*` |
+| `routers/` | HTTP route handlers (`ingest`, `plans`, `notifications`, `workspaces`, `logs`, `tools`) — refactor-only; same paths and semantics as before split |
+| `services/auth_roles.py` | `classify_api_key`, `route_api_role`, `key_allows_route` for middleware |
+| `services/workspace_mirror.py` | Plan proposal workspace mirror helpers (readable evidence files) |
 | `ingestion.py` | Normalise ingest payloads |
 | `classification.py` | Intent → `RoutingTarget` |
 | `dispatch.py` | Orchestrate classify → route → execute → failure notes → audit |
@@ -326,6 +329,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `powershell -ExecutionPolicy Bypass -File .\scripts\test_external_ui_flow.ps1` simulates a safe external UI/client flow through proposal, review, explicit approval, explicit execution, and completed result review.
 - On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
 - `python scripts/test_tool_http_allowlist_guard.py` fails if tool execution modules import raw HTTP clients (`requests`, `httpx`, etc.) outside `tools_http.py`.
+- `python scripts/test_router_split_regression.py` checks OpenAPI paths and auth-role mapping after the `routers/` split (no live traffic).
 - `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
 - `python scripts/test_approval_file_locking.py` asserts per-plan transition locks (`data/plans/locks/<plan_id>.lockdir`) and **409** `plan_transition_locked` on approve/reject/execute contention.
