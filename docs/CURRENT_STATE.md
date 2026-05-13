@@ -25,6 +25,12 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - **Frontend convenience**
   - `POST /plans/from-message` (deterministic, proposal-only)
 
+## Automated authority-boundary tests (local, no real services)
+- `python scripts/test_policy_approval_unit_tests.py` — `policy.evaluate_plan`, `/plans/propose` (including strict agent allowlist), approve/reject/execute separation, hash preconditions before execution, duplicate-execute `409`, `/plans/from-message` proposal-only, `/ingest` `LOCAL_TOOLS` gating (including that natural-language “approval” text is not authorization). Uses temp plan/workspace dirs and stubs `run_installed_tool` / sandbox paths.
+- `python scripts/test_approval_state_locking.py` — plan content hash binding and fail-closed execute paths.
+- `python scripts/test_ingest_local_tools_gated.py` — ingest `LOCAL_TOOLS` does not call `tools.execute`.
+- `python scripts/test_plans_from_message_no_execute.py` — `/plans/from-message` does not execute tools.
+
 ## Installed tools (current)
 - **Maintainer (read-only / proposal-only)**: `inspect_file`, `list_project_files`, `search_repo`, `propose_patch`
 - **Media tools**: Radarr/Sonarr/SABnzbd tools (installed tools remain registry-defined; agent allowlists restrict what can be proposed)
