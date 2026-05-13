@@ -25,14 +25,14 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
   - `GET /workspaces/{state}/{task_id}`
   - `GET /workspaces/{state}/{task_id}/files/{filename}`
 - **Frontend convenience**
-  - `POST /plans/from-message` (deterministic, proposal-only)
+  - `POST /plans/from-message` — deterministic **proposal-only** plan builder in `services/plan_builder.py`: allowlisted agents (`project_maintainer_agent`, `media_agent`), uses **installed** registry tool names as truth (does not invent tools). On success, routes through `POST /plans/propose` (pending + notification). Returns **400** JSON `missing_capability` / `proposal_needed` when no installed tool matches (e.g. Navidrome catalog intents); **no** pending plan or notification in that case. Does not execute, approve, call real services, or mutate the registry.
 
 ## Automated authority-boundary tests (local, no real services)
 - `python scripts/test_policy_approval_unit_tests.py` — `policy.evaluate_plan`, `/plans/propose` (including strict agent allowlist), approve/reject/execute separation, hash preconditions before execution, duplicate-execute `409`, `/plans/from-message` proposal-only, `/ingest` `LOCAL_TOOLS` gating (including that natural-language “approval” text is not authorization). Uses temp plan/workspace dirs and stubs `run_installed_tool` / sandbox paths.
 - `python scripts/test_approval_state_locking.py` — plan content hash binding and fail-closed execute paths.
 - `python scripts/test_ingest_local_tools_gated.py` — ingest `LOCAL_TOOLS` does not call `tools.execute`.
 - `python scripts/test_approval_role_keys.py` — optional role-separated `X-API-Key` behavior (`GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY`) vs master `GATEWAY_API_KEY`.
-- `python scripts/test_pending_approval_notifications.py` — append-only pending-approval JSONL, read-only notifications GET, role gates, no registry/tool/sandbox side effects on propose/from-message.
+- `python scripts/test_plan_builder_generalization.py` — `/plans/from-message` generalized builder (maintainer + media + missing capability + roles) without tool/sandbox/registry mutation.
 
 ## Installed tools (current)
 - **Maintainer (read-only / proposal-only)**: `inspect_file`, `list_project_files`, `search_repo`, `propose_patch`
