@@ -20,9 +20,9 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePath
 from typing import Any
 
-import httpx
 import registry as reg
 import sandbox
+import tools_http
 from http_allowlist import validate_http_destination
 from models import NormalisedEnvelope, ToolResult
 
@@ -60,13 +60,13 @@ async def radarr_search(args: dict) -> ToolResult:
     if blocked:
         return blocked
     try:
-        async with httpx.AsyncClient(
+        async with tools_http.async_http_client(
             timeout=float(os.getenv("TOOL_TIMEOUT", "15"))
         ) as client:
             resp = await client.get(lookup_url, params=params)
             resp.raise_for_status()
             results = resp.json()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="radarr_search", success=False, error=str(exc))
     return ToolResult(
         tool_name="radarr_search",
@@ -91,13 +91,13 @@ async def radarr_add(args: dict) -> ToolResult:
     if blocked:
         return blocked
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with tools_http.async_http_client(timeout=timeout) as client:
             lookup = await client.get(
                 lookup_url, params={"term": title, "apikey": api_key}
             )
             lookup.raise_for_status()
             candidates = lookup.json()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="radarr_add", success=False, error=str(exc))
     if not candidates:
         return ToolResult(
@@ -118,10 +118,10 @@ async def radarr_add(args: dict) -> ToolResult:
     if blocked_post:
         return blocked_post
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with tools_http.async_http_client(timeout=timeout) as client:
             resp = await client.post(post_url, json=payload)
             resp.raise_for_status()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="radarr_add", success=False, error=str(exc))
     return ToolResult(
         tool_name="radarr_add",
@@ -145,13 +145,13 @@ async def sonarr_search(args: dict) -> ToolResult:
     if blocked:
         return blocked
     try:
-        async with httpx.AsyncClient(
+        async with tools_http.async_http_client(
             timeout=float(os.getenv("TOOL_TIMEOUT", "15"))
         ) as client:
             resp = await client.get(lookup_url, params=params)
             resp.raise_for_status()
             results = resp.json()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="sonarr_search", success=False, error=str(exc))
     return ToolResult(
         tool_name="sonarr_search",
@@ -176,13 +176,13 @@ async def sonarr_add(args: dict) -> ToolResult:
     if blocked:
         return blocked
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with tools_http.async_http_client(timeout=timeout) as client:
             lookup = await client.get(
                 lookup_url, params={"term": title, "apikey": api_key}
             )
             lookup.raise_for_status()
             candidates = lookup.json()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="sonarr_add", success=False, error=str(exc))
     if not candidates:
         return ToolResult(
@@ -203,10 +203,10 @@ async def sonarr_add(args: dict) -> ToolResult:
     if blocked_post:
         return blocked_post
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with tools_http.async_http_client(timeout=timeout) as client:
             resp = await client.post(post_url, json=payload)
             resp.raise_for_status()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="sonarr_add", success=False, error=str(exc))
     return ToolResult(
         tool_name="sonarr_add", success=True, data={"added": series["title"]}
@@ -227,13 +227,13 @@ async def sabnzbd_queue(args: dict) -> ToolResult:
     if blocked:
         return blocked
     try:
-        async with httpx.AsyncClient(
+        async with tools_http.async_http_client(
             timeout=float(os.getenv("TOOL_TIMEOUT", "15"))
         ) as client:
             resp = await client.get(api_url, params=params)
             resp.raise_for_status()
             data = resp.json()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="sabnzbd_queue", success=False, error=str(exc))
     queue = data.get("queue", {})
     return ToolResult(
@@ -262,12 +262,12 @@ async def sabnzbd_pause(args: dict) -> ToolResult:
     if blocked:
         return blocked
     try:
-        async with httpx.AsyncClient(
+        async with tools_http.async_http_client(
             timeout=float(os.getenv("TOOL_TIMEOUT", "15"))
         ) as client:
             resp = await client.get(api_url, params=params)
             resp.raise_for_status()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="sabnzbd_pause", success=False, error=str(exc))
     return ToolResult(tool_name="sabnzbd_pause", success=True, data={"paused": True})
 
@@ -286,12 +286,12 @@ async def sabnzbd_resume(args: dict) -> ToolResult:
     if blocked:
         return blocked
     try:
-        async with httpx.AsyncClient(
+        async with tools_http.async_http_client(
             timeout=float(os.getenv("TOOL_TIMEOUT", "15"))
         ) as client:
             resp = await client.get(api_url, params=params)
             resp.raise_for_status()
-    except httpx.HTTPError as exc:
+    except tools_http.HTTPError as exc:
         return ToolResult(tool_name="sabnzbd_resume", success=False, error=str(exc))
     return ToolResult(tool_name="sabnzbd_resume", success=True, data={"resumed": True})
 

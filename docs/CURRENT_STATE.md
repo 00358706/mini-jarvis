@@ -5,7 +5,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 ## Current architecture summary
 - **Gateway remains the authority**: validation, registry, policy, approvals, and execution live in gateway code.
 - **Agents are folders**: `agents/<id>/` is configuration/context only; agents do not execute tools.
-- **Execution boundary**: tools run via `sandbox.run()` → `sandbox_worker.py` (subprocess + timeout + restricted env).
+- **Execution boundary**: tools run via `sandbox.run()` → `sandbox_worker.py` (subprocess + timeout + restricted env). HTTP from built-in tools goes through `tools_http.py` (central `httpx`); `scripts/test_tool_http_allowlist_guard.py` fails if `tools.py` / `sandbox.py` / `sandbox_worker.py` import raw HTTP clients directly (not OS-level sandboxing).
 - **Workspaces are readable state**: `data/workspaces/{active|completed|rejected}/<plan_id>/` mirrors plan lifecycle; files are not authority.
 - **HTTP authentication**: `GATEWAY_API_KEY` is the **master** key (all protected routes). Optional **`GATEWAY_INPUT_API_KEY`**, **`GATEWAY_APPROVAL_API_KEY`**, and **`GATEWAY_ADMIN_API_KEY`** restrict clients by route class: input (ingest, `POST /plans/propose`, `POST /plans/from-message`, read-only GETs including **`GET /notifications/pending-approvals`**), plan approve/reject/execute, and registry tool lifecycle POSTs respectively. When a role key is set, lower-tier keys cannot call higher-tier routes (`401` unknown/missing key, `403` insufficient role). See `README.md` and `.env.example`.
 
@@ -33,7 +33,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `python scripts/test_approval_file_locking.py` — per-plan `locks/<plan_id>.lockdir` transition serialization; **409** `plan_transition_locked` on contention; execute must not run policy/tools when the lock cannot be acquired.
 - `python scripts/test_ingest_local_tools_gated.py` — ingest `LOCAL_TOOLS` does not call `tools.execute`.
 - `python scripts/test_approval_role_keys.py` — optional role-separated `X-API-Key` behavior (`GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY`) vs master `GATEWAY_API_KEY`.
-- `python scripts/test_plan_builder_generalization.py` — `/plans/from-message` generalized builder (maintainer + media + missing capability + roles) without tool/sandbox/registry mutation.
+- `python scripts/test_tool_http_allowlist_guard.py` — static scan: tool execution modules must not import `requests` / `httpx` / `aiohttp` / `urllib.request` (use `tools_http.py` only). Not a network sandbox; future work may enforce registry `http_allowlist` inside the helper.
 
 ## Installed tools (current)
 - **Maintainer (read-only / proposal-only)**: `inspect_file`, `list_project_files`, `search_repo`, `propose_patch`

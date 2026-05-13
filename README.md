@@ -142,9 +142,9 @@ Tool implementations live in `tools.py`, but the **parent gateway process does n
 
 ---
 
-## `http_allowlist.py`
+## `http_allowlist.py` and `tools_http.py`
 
-Built-in tools use **httpx** against Radarr, Sonarr, and SABnzbd URLs derived from configuration. `validate_http_destination()` ensures each request URL matches the **configured base URL** (same scheme, host, port, and path prefix). That blocks accidental or buggy requests to arbitrary hosts; it is **not** a substitute for OS-level network isolation.
+Built-in tools reach Radarr, Sonarr, and SABnzbd through **`tools_http.py`** (central **`httpx`**). Before each request, **`validate_http_destination()`** in `http_allowlist.py` checks the full URL against the **configured base URL** (same scheme, host, port, and path prefix). That blocks accidental requests to arbitrary hosts; it is **not** a substitute for OS-level network isolation. A static test (`scripts/test_tool_http_allowlist_guard.py`) fails if `tools.py` / `sandbox.py` / `sandbox_worker.py` import raw HTTP clients directly. Future work may move registry `http_allowlist` enforcement into `tools_http`; this branch does not claim that yet.
 
 ---
 
@@ -167,6 +167,7 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `tools.py` | Intent parsing, registry + schema gate, `sandbox.run()` |
 | `sandbox.py` | Subprocess isolation for tools |
 | `sandbox_worker.py` | Child entrypoint for one tool invocation |
+| `tools_http.py` | Central `httpx` client for tool execution and `execute_http_tool` |
 | `http_allowlist.py` | Per-request URL policy for tool HTTP calls |
 | `audit.py` | Structured audit log |
 | `config.py` | Environment-backed settings |
@@ -324,7 +325,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - Run `powershell -ExecutionPolicy Bypass -File .\scripts\test_plan_api.ps1`.
 - `powershell -ExecutionPolicy Bypass -File .\scripts\test_external_ui_flow.ps1` simulates a safe external UI/client flow through proposal, review, explicit approval, explicit execution, and completed result review.
 - On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
-- `python scripts/test_plans_from_message_no_execute.py` is a local regression test that fails if `/plans/from-message` crosses into tool execution.
+- `python scripts/test_tool_http_allowlist_guard.py` fails if tool execution modules import raw HTTP clients (`requests`, `httpx`, etc.) outside `tools_http.py`.
 - `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
 - `python scripts/test_approval_file_locking.py` asserts per-plan transition locks (`data/plans/locks/<plan_id>.lockdir`) and **409** `plan_transition_locked` on approve/reject/execute contention.
@@ -434,7 +435,7 @@ Approval and execution remain via the gateway endpoints and wrappers.
 - The classifier is constrained to an **allowlist of routing tokens**; free-form model output is not executed as code or routing.
 - Tools run only if they appear in the registry with **`installed`** status; arguments are checked against the registry **`input_schema`** before the sandbox runs.
 - **Tool execution** goes through **`sandbox.run()` → `sandbox_worker`** only; the gateway does not call tool coroutines directly on the ingest path.
-- **`http_allowlist`** restricts tool HTTP destinations to the configured service base URLs.
+- **`http_allowlist`** restricts tool HTTP destinations to the configured service base URLs; **`tools_http`** is the only approved `httpx` surface on the tool execution path (see `scripts/test_tool_http_allowlist_guard.py`).
 - Sensitive or multimodal raw payloads are not forwarded blindly to LLMs per existing ingestion and routing policy (see code comments in `ingestion.py` / routing paths).
 
 ---
@@ -455,7 +456,7 @@ Deferred ideas and future branch candidates live in [`docs/BACKLOG.md`](docs/BAC
 
 ## Extending tools and routing
 
-- **New built-in tool**: implement in `tools.py`, register in `_TOOL_FUNCS`, seed or lifecycle through `registry`, extend `_INTENT_MAP` as needed, keep httpx calls behind `http_allowlist` checks.
+- **New built-in tool**: implement in `tools.py`, register in `_TOOL_FUNCS`, seed or lifecycle through `registry`, extend `_INTENT_MAP` as needed; route outbound HTTP through `tools_http` and keep `http_allowlist` checks before requests.
 - **New routing target**: update `models.py`, `classification.py`, and `dispatch.py` together.
 - **Agent personas**: extend under `agents/<agent_id>/`; wire-up in application code is a separate phase.
 - **Generated tool candidates**: proposed/generated tools must move through proposal artifacts, a tool build workspace, tests, install review, explicit registry install, and then normal plan/policy/approval/schema/sandbox execution. Candidate files are not edited directly into production tools or registry state.

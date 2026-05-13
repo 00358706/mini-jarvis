@@ -3,7 +3,7 @@ sandbox.py — Isolated tool execution environment.
 
 Execution contract (Phase 4):
   gateway (dispatch/tools) → sandbox.run() → subprocess (sandbox_worker.py)
-  → run_tool_by_name() → httpx calls to registered backends
+  → run_tool_by_name() → tools_http (httpx) to registered backends
 
 Isolation (current tier — extend with OS sandbox / seccomp as needed):
   - Tool code runs in a child Python process with its own interpreter.
@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from config import cfg
+import tools_http
 
 
 # Deferred import to avoid circular imports at module load.
@@ -238,19 +239,17 @@ def execute_http_tool(
     Used for tools like Radarr/Sonarr that live behind their own services.
     The model never calls this — only dispatch.py does, after registry check.
     """
-    import httpx  # only imported here — not available in the Python sandbox above
-
     start = time.monotonic()
     try:
-        with httpx.Client(timeout=timeout_seconds) as client:
-            resp = client.post(endpoint, json=payload)
-            resp.raise_for_status()
-            return SandboxResult(
-                success=True,
-                output=resp.json(),
-                execution_time_ms=(time.monotonic() - start) * 1000,
-                exit_code=resp.status_code,
-            )
+        output, http_status = tools_http.sync_post_json_raise(
+            endpoint, payload, timeout_seconds=timeout_seconds
+        )
+        return SandboxResult(
+            success=True,
+            output=output,
+            execution_time_ms=(time.monotonic() - start) * 1000,
+            exit_code=http_status,
+        )
     except Exception as exc:
         return SandboxResult(
             success=False,
