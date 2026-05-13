@@ -11,6 +11,7 @@ Mini-Jarvis is currently an **execution-isolated gateway** with a **plan/policy/
 Implemented pieces include:
 - `POST /ingest` as the multimodal **input surface** and classifier router (including a gated `LOCAL_TOOLS` hint that does **not** execute tools by default).
 - `/plans/*` for proposal, review, explicit approval, and explicit execution of installed tools.
+- Structured **plan steps** include optional **`safety`** metadata (`dry_run`, idempotency fields, **compensation** / **rollback_notes**, **`compensation_implemented`**) for review and workspace evidence. **`dry_run`** is **descriptive only** until a future runtime branch: execution does **not** skip tools when it is true. **Compensation and rollback notes are never auto-executed**; **`compensation_implemented`** means a documented or implemented path is claimed and, when true, **`compensation`** text must be non-empty for schema validity.
 - Readable plan workspaces under `data/workspaces/` as evidence only.
 - Automation Lab proposal artifacts under `data/automation_lab/<request_id>/`.
 - Registry-informed, read-only capability lookup and deterministic scoring for review.
@@ -336,6 +337,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `python scripts/test_policy_approval_unit_tests.py` exercises `evaluate_plan`, `/plans/*` boundaries, ingest gating, and policy-before-execute ordering (stubbed tools).
 - `python scripts/test_approval_role_keys.py` checks optional `GATEWAY_*_API_KEY` role separation vs master `GATEWAY_API_KEY`.
 - `python scripts/test_plan_builder_generalization.py` exercises generalized `/plans/from-message` (maintainer + media + missing capability + roles) without tool/sandbox/registry side effects.
+- `python scripts/test_plan_step_idempotency_dry_run.py` covers `StepSafety` defaults/validation, deterministic builder read-only metadata, `PLAN.json` persistence, compact workspace passthrough, and proves **`dry_run` does not skip execution**.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
 - It does not execute tools or call the sandbox.
@@ -350,7 +352,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 
 ### `POST /plans/from-message` (frontend convenience)
 Convenience endpoint for Open WebUI or other local frontends to **create a proposed plan from a user message**.
-It uses **`services/plan_builder.py`** (deterministic, rule-based): allowlisted agents only, registry **installed** tool names as capability truth (no invented tools). It does **not** approve plans, execute tools, call the sandbox, or mutate the registry.
+It uses **`services/plan_builder.py`** (deterministic, rule-based): allowlisted agents only, registry **installed** tool names as capability truth (no invented tools). Emitted steps include read-only **`safety`** metadata for review (evidence only; execute does not branch on `dry_run`). It does **not** approve plans, execute tools, call the sandbox, or mutate the registry.
 
 - **Supported agents:** `project_maintainer_agent` (repository list/search/inspect paths, unchanged intent) and `media_agent` (safe mappings such as movie/series search and SABnzbd queue when the corresponding tools are **installed**).
 - **Missing capability:** requests such as Navidrome album browsing with no installed handler return **400** JSON with `status: "missing_capability"`, `proposal_needed: true`, and a hint toward Automation Lab / explicit tool work — **no** pending plan and **no** notification append.
@@ -362,7 +364,7 @@ Read-only endpoints for inspecting `data/workspaces/*` planning state (protected
 They do not execute tools or mutate workspace files.
 
 - `GET /workspaces?state=active|completed|rejected` — list compact workspace summaries.
-- `GET /workspaces/{state}/{task_id}/compact` — compact “approval-card” summary for human review UX.
+- `GET /workspaces/{state}/{task_id}/compact` — compact “approval-card” summary for human review UX; each step may include a **`safety`** object when present in `PLAN.json` (additive; evidence only).
 - `GET /workspaces/{state}/{task_id}` — detailed review summary including `PLAN.json` / `POLICY_DECISION.json` (if present).
 - `GET /workspaces/{state}/{task_id}/files/{filename}` — read one known standard workspace file (e.g. `RESULT.md`).
 
