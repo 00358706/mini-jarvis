@@ -7,7 +7,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - **Agents are folders**: `agents/<id>/` is configuration/context only; agents do not execute tools.
 - **Execution boundary**: tools run via `sandbox.run()` → `sandbox_worker.py` (subprocess + timeout + restricted env).
 - **Workspaces are readable state**: `data/workspaces/{active|completed|rejected}/<plan_id>/` mirrors plan lifecycle; files are not authority.
-- **HTTP authentication**: `GATEWAY_API_KEY` is the **master** key (all protected routes). Optional **`GATEWAY_INPUT_API_KEY`**, **`GATEWAY_APPROVAL_API_KEY`**, and **`GATEWAY_ADMIN_API_KEY`** restrict clients by route class: input/review (ingest, `POST /plans/propose`, `POST /plans/from-message`, read-only GETs), plan approve/reject/execute, and registry tool lifecycle POSTs respectively. When a role key is set, lower-tier keys cannot call higher-tier routes (`401` unknown/missing key, `403` insufficient role). See `README.md` and `.env.example`.
+- **HTTP authentication**: `GATEWAY_API_KEY` is the **master** key (all protected routes). Optional **`GATEWAY_INPUT_API_KEY`**, **`GATEWAY_APPROVAL_API_KEY`**, and **`GATEWAY_ADMIN_API_KEY`** restrict clients by route class: input (ingest, `POST /plans/propose`, `POST /plans/from-message`, read-only GETs including **`GET /notifications/pending-approvals`**), plan approve/reject/execute, and registry tool lifecycle POSTs respectively. When a role key is set, lower-tier keys cannot call higher-tier routes (`401` unknown/missing key, `403` insufficient role). See `README.md` and `.env.example`.
 
 ## Implemented APIs
 - **Ingest**
@@ -16,6 +16,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
   - `POST /plans/propose` — persists pending plans with a server-computed **`reviewed_plan_sha256`** over the canonical plan core (client-supplied digest fields are stripped and recomputed). Legacy on-disk plans without hashes are intentionally unsupported for approve/execute until re-proposed.
   - `GET /plans/pending`
   - `GET /plans/pending/{plan_id}` — includes **`reviewed_plan_sha256`** when present.
+  - **`GET /notifications/pending-approvals`** — read-only listing of recent **informational** pending-approval notifications (append-only **`data/notifications/pending_approvals.jsonl`**; latest **200** by default). Notifications do **not** approve or execute (`can_approve` / `can_execute` are always false in records); operators still use explicit approve/execute POSTs with approval-capable keys and valid hashes.
   - `POST /plans/{plan_id}/approve` — requires **`reviewed_plan_sha256`** on the pending document and verifies it matches a fresh digest; writes **`approved_plan_sha256`**; does not execute.
   - `POST /plans/{plan_id}/reject`
   - `POST /plans/{plan_id}/execute` — requires **`approved_plan_sha256`**, verifies current plan core matches that digest **before** policy or tool/sandbox calls; returns **`409`** with `already_executed` if the plan is already under `executed/`; approval never implies execution.
@@ -31,6 +32,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `python scripts/test_approval_state_locking.py` — plan content hash binding and fail-closed execute paths.
 - `python scripts/test_ingest_local_tools_gated.py` — ingest `LOCAL_TOOLS` does not call `tools.execute`.
 - `python scripts/test_approval_role_keys.py` — optional role-separated `X-API-Key` behavior (`GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY`) vs master `GATEWAY_API_KEY`.
+- `python scripts/test_pending_approval_notifications.py` — append-only pending-approval JSONL, read-only notifications GET, role gates, no registry/tool/sandbox side effects on propose/from-message.
 
 ## Installed tools (current)
 - **Maintainer (read-only / proposal-only)**: `inspect_file`, `list_project_files`, `search_repo`, `propose_patch`

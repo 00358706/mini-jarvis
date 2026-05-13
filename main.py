@@ -10,6 +10,7 @@ Phase 4:
 Phase 3 (retained):
   GET  /logs                 — structured audit log (all entries)
   GET  /events               — audit log filtered to device/sensor events
+  GET  /notifications/pending-approvals — read-only pending-approval notification listing (informational)
   GET  /tools                — list all tools in the registry
   GET  /tools/{name}/{version} — inspect a specific tool definition
   POST /tools/propose        — propose a new tool (lifecycle: proposed)
@@ -86,6 +87,7 @@ from approvals import (
     save_pending_plan,
     storage_dict_to_plan,
 )
+from notifications import read_pending_approval_notifications
 from config import cfg
 from dispatch import process
 from ingestion import normalise
@@ -303,6 +305,8 @@ def _route_api_role(method: str, path: str) -> str:
     if method == "GET" and path == "/plans/pending":
         return "READ_REVIEW"
     if method == "GET" and re.match(r"^/plans/pending/[^/]+$", path):
+        return "READ_REVIEW"
+    if method == "GET" and path == "/notifications/pending-approvals":
         return "READ_REVIEW"
     if method == "GET" and path == "/workspaces":
         return "READ_REVIEW"
@@ -788,6 +792,20 @@ async def plans_pending_get(plan_id: str):
     if isinstance(h, str) and h.strip():
         out["reviewed_plan_sha256"] = h.strip()
     return out
+
+
+@app.get("/notifications/pending-approvals")
+async def notifications_pending_approvals():
+    """
+    Read-only: latest pending-approval notification records (informational only).
+
+    Does not approve, reject, execute, or mutate registry. Operators still use
+    ``POST /plans/{plan_id}/approve`` and ``POST /plans/{plan_id}/execute`` with
+    an approval-capable key and valid hashes; see ``GET /plans/pending/{plan_id}``
+    for ``reviewed_plan_sha256``.
+    """
+    rows = read_pending_approval_notifications()
+    return {"notifications": rows, "count": len(rows)}
 
 
 @app.post("/plans/{plan_id}/approve")

@@ -117,10 +117,10 @@ Branch sequence:
    - Purpose: Separate “can call the gateway” from approve/execute vs registry admin when operators configure split keys.
    - Hard safety rules: No weaker auth; approval key is not admin; `/health` stays public; no plan or ingest semantic changes.
 
-5. `pending-approval-notifications`
-   - Scope: Add notification or listing hooks for pending approvals without changing approval or execution semantics.
+5. `pending-approval-notifications` (**baseline implemented**)
+   - Scope: Append-only **`data/notifications/pending_approvals.jsonl`** on each `save_pending_plan`; read-only **`GET /notifications/pending-approvals`** (`READ_REVIEW`, exact path only, latest **200** records, no marking read). Tests: `scripts/test_pending_approval_notifications.py`.
    - Purpose: Improve operator visibility while keeping human review explicit.
-   - Hard safety rules: Notifications must be informational only; no approve/reject/execute side effects from notification delivery; no auto-approval.
+   - Hard safety rules: Notifications must be informational only; no approve/reject/execute side effects from notification delivery; no auto-approval; no webhooks/scheduler/MCP; JSONL lines are not deduplicated (re-propose appends).
 
 6. `plan-builder-generalization`
    - Scope: Generalize deterministic request-to-plan construction beyond the current `/plans/from-message` helper and agent-specific cases.
