@@ -68,6 +68,7 @@ import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
+import asyncio
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
@@ -77,11 +78,13 @@ import audit
 import registry as reg
 from agent_loader import get_agent_tool_policy, load_agent
 from approvals import (
+    PlanTransitionLockTimeout,
+    _mark_executed_body,
     approve_plan,
+    async_plan_transition_lock,
     compute_plan_sha256,
     list_pending_plans,
     load_plan_storage_dict,
-    mark_executed,
     plan_already_executed,
     reject_plan,
     save_pending_plan,
@@ -152,6 +155,17 @@ class PlanFromMessageRequest(BaseModel):
 
 def _workspace_exists_active(task_id: str) -> bool:
     return workspace_path(task_id, state="active").is_dir()
+
+
+def _plan_transition_locked_exc(plan_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "status": "plan_transition_locked",
+            "plan_id": plan_id,
+            "message": "execution or transition already in progress.",
+        },
+    )
 
 
 def _route_metadata_for_plan(plan: Plan) -> dict:
@@ -568,7 +582,17 @@ async def plans_propose(plan: Plan):
         )
 
     if plan.requires_approval:
-        save_pending_plan(plan)
+        try:
+            await asyncio.to_thread(save_pending_plan, plan)
+        except PlanTransitionLockTimeout:
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={
+                    "status": "plan_transition_locked",
+                    "plan_id": plan.plan_id,
+                    "message": "execution or transition already in progress.",
+                },
+            )
         try:
             approval_path = workspace_path(plan.plan_id, state="active") / "APPROVAL.md"
             approval_path.write_text(
@@ -745,7 +769,9 @@ async def notifications_pending_approvals():
 async def plans_approve(plan_id: str):
     """Plan API — non-breaking planning/approval layer. No execution."""
     try:
-        approve_plan(plan_id)
+        await asyncio.to_thread(approve_plan, plan_id)
+    except PlanTransitionLockTimeout:
+        raise _plan_transition_locked_exc(plan_id) from None
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -784,7 +810,9 @@ async def plans_approve(plan_id: str):
 async def plans_reject(plan_id: str, req: PlanRejectRequest):
     """Plan API — non-breaking planning/approval layer. No execution."""
     try:
-        reject_plan(plan_id, reason=req.reason)
+        await asyncio.to_thread(reject_plan, plan_id, req.reason)
+    except PlanTransitionLockTimeout:
+        raise _plan_transition_locked_exc(plan_id) from None
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -831,227 +859,235 @@ async def plans_execute(plan_id: str):
     `run_installed_tool` (registry + schema + sandbox).
     Does not call models. Pending or proposed plans are not executable here.
     """
-    if plan_already_executed(plan_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "status": "already_executed",
-                "plan_id": plan_id,
-                "message": "This plan was already executed; re-execution is not allowed.",
-            },
-        )
-
     try:
-        raw_approved = load_plan_storage_dict(plan_id, "approved")
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Plan is not in approved state or was not found under approved plans.",
-        ) from None
+        async with async_plan_transition_lock(plan_id):
+            if plan_already_executed(plan_id):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "status": "already_executed",
+                        "plan_id": plan_id,
+                        "message": "This plan was already executed; re-execution is not allowed.",
+                    },
+                )
 
-    stored_hash = raw_approved.get("approved_plan_sha256")
-    if not isinstance(stored_hash, str) or not stored_hash.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "status": "approval_hash_missing",
-                "plan_id": plan_id,
-                "message": (
-                    "Approved plan is missing approved_plan_sha256; execution refused. "
-                    "Re-approve from a current pending plan with server-owned hashes."
-                ),
-            },
-        )
+            try:
+                raw_approved = load_plan_storage_dict(plan_id, "approved")
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Plan is not in approved state or was not found under approved plans.",
+                ) from None
 
-    if compute_plan_sha256(raw_approved) != stored_hash.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "status": "plan_hash_mismatch",
-                "plan_id": plan_id,
-                "message": (
-                    "Plan content no longer matches approved_plan_sha256; execution refused."
-                ),
-            },
-        )
+            stored_hash = raw_approved.get("approved_plan_sha256")
+            if not isinstance(stored_hash, str) or not stored_hash.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "status": "approval_hash_missing",
+                        "plan_id": plan_id,
+                        "message": (
+                            "Approved plan is missing approved_plan_sha256; execution refused. "
+                            "Re-approve from a current pending plan with server-owned hashes."
+                        ),
+                    },
+                )
 
-    try:
-        plan = storage_dict_to_plan(raw_approved)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from None
+            if compute_plan_sha256(raw_approved) != stored_hash.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "status": "plan_hash_mismatch",
+                        "plan_id": plan_id,
+                        "message": (
+                            "Plan content no longer matches approved_plan_sha256; execution refused."
+                        ),
+                    },
+                )
 
-    if plan.status != "approved":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Plan status must be approved to execute.",
-        )
+            try:
+                plan = storage_dict_to_plan(raw_approved)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+                ) from None
 
-    decision = evaluate_plan(plan, installed_tools=_installed_tool_names())
-    if not decision.allowed:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "status": "policy_rejected",
-                "plan_id": plan_id,
-                "reasons": decision.reasons,
-            },
-        )
+            if plan.status != "approved":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Plan status must be approved to execute.",
+                )
 
-    await audit.append(
-        kind="plan",
-        input_summary=f"Plan execution started: {plan_id}",
-        result_summary="status=executing",
-    )
-    try:
-        append_execution_log(
-            plan_id,
-            {
-                "event": "execution_started",
-                "plan_id": plan_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-        )
-    except FileNotFoundError:
-        pass
-    except Exception as exc:
-        logger.warning("plans/execute workspace start log failed for %s: %s", plan_id, exc)
-        await audit.append(
-            kind="plan",
-            input_summary=f"Workspace update failed on execute start: {plan_id}",
-            result_summary=f"warning={str(exc)[:200]}",
-        )
+            decision = evaluate_plan(plan, installed_tools=_installed_tool_names())
+            if not decision.allowed:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "status": "policy_rejected",
+                        "plan_id": plan_id,
+                        "reasons": decision.reasons,
+                    },
+                )
 
-    step_results: list[dict] = []
-    for step in plan.steps:
-        tool_result = await run_installed_tool(step.tool, step.args)
-        step_payload = {
-            "step_id": step.step_id,
-            "tool": step.tool,
-            "status": "ok" if tool_result.success else "error",
-            "result": tool_result.model_dump(mode="json"),
-        }
-        step_results.append(step_payload)
-        try:
-            append_execution_log(
-                plan_id,
-                {
-                    "event": "step_completed",
-                    "plan_id": plan_id,
-                    "step_id": step.step_id,
-                    "tool": step.tool,
-                    "success": tool_result.success,
-                    "error": tool_result.error,
-                },
-            )
-        except FileNotFoundError:
-            pass
-        except Exception as exc:
-            logger.warning("plans/execute workspace log append failed for %s: %s", plan_id, exc)
             await audit.append(
                 kind="plan",
-                input_summary=f"Workspace update failed on execute step: {plan_id}",
-                result_summary=f"warning={str(exc)[:200]}",
+                input_summary=f"Plan execution started: {plan_id}",
+                result_summary="status=executing",
             )
-        await audit.append(
-            kind="plan",
-            input_summary=f"Plan step {step.step_id} tool={step.tool} plan={plan_id}",
-            result_summary=(
-                "ok"
-                if tool_result.success
-                else (tool_result.error or "error")[:200]
-            ),
-        )
-
-    ok_steps = sum(1 for s in step_results if s["status"] == "ok")
-    err_steps = len(step_results) - ok_steps
-    exec_status = "executed_success" if err_steps == 0 else "executed_with_errors"
-
-    response_body = {
-        "status": exec_status,
-        "plan_id": plan_id,
-        "steps": step_results,
-    }
-
-    mark_executed(plan_id, result=response_body)
-    try:
-        append_execution_log(
-            plan_id,
-            {
-                "event": "execution_completed",
-                "plan_id": plan_id,
-                "status": exec_status,
-            },
-        )
-        step_lines = "\n".join(
-            (
-                f"- `{s['step_id']}` / `{s['tool']}`: {s['status']}"
-                + (
-                    f" — {(s['result'].get('error') or 'error')}"
-                    if s["status"] == "error"
-                    else ""
+            try:
+                append_execution_log(
+                    plan_id,
+                    {
+                        "event": "execution_started",
+                        "plan_id": plan_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
                 )
-            )
-            for s in step_results
-        ) or "- (no steps)"
-        for s in step_results:
-            step_result = s.get("result")
-            if not isinstance(step_result, dict):
-                continue
-            step_data = step_result.get("data")
-            if not isinstance(step_data, dict):
-                continue
-            if step_data.get("proposal_only") is not True:
-                continue
-            patch_text = step_data.get("patch")
-            if not isinstance(patch_text, str) or not patch_text:
-                continue
-            target_path = str(step_data.get("path") or "")
-            summary = str(step_data.get("summary") or "")
-            applied = bool(step_data.get("applied"))
-            write_patch_proposal(
-                plan_id,
-                target_path=target_path,
-                summary=summary,
-                patch=patch_text,
-                applied=applied,
-            )
-            break
-        write_result(
-            plan_id,
-            (
-                "# Result\n\n"
-                f"- plan id: `{plan_id}`\n"
-                f"- status: `{exec_status}`\n\n"
-                "## Step summary\n\n"
-                f"{step_lines}\n\n"
-                "## Totals\n\n"
-                f"- Steps total: {len(step_results)}\n"
-                f"- Steps ok: {ok_steps}\n"
-                f"- Steps error: {err_steps}\n"
-                "\n"
-                "Execution ran through the installed tool path with registry/schema checks "
-                "and sandboxed tool execution.\n"
-            ),
-        )
-        if _workspace_exists_active(plan_id):
-            move_workspace(plan_id, "completed")
-    except FileNotFoundError:
-        pass
-    except Exception as exc:
-        logger.warning("plans/execute workspace finalize failed for %s: %s", plan_id, exc)
-        await audit.append(
-            kind="plan",
-            input_summary=f"Workspace update failed on execute finalize: {plan_id}",
-            result_summary=f"warning={str(exc)[:200]}",
-        )
+            except FileNotFoundError:
+                pass
+            except Exception as exc:
+                logger.warning("plans/execute workspace start log failed for %s: %s", plan_id, exc)
+                await audit.append(
+                    kind="plan",
+                    input_summary=f"Workspace update failed on execute start: {plan_id}",
+                    result_summary=f"warning={str(exc)[:200]}",
+                )
 
-    await audit.append(
-        kind="plan",
-        input_summary=f"Plan execution completed: {plan_id}",
-        result_summary=f"status={exec_status}",
-    )
+            step_results: list[dict] = []
+            for step in plan.steps:
+                tool_result = await run_installed_tool(step.tool, step.args)
+                step_payload = {
+                    "step_id": step.step_id,
+                    "tool": step.tool,
+                    "status": "ok" if tool_result.success else "error",
+                    "result": tool_result.model_dump(mode="json"),
+                }
+                step_results.append(step_payload)
+                try:
+                    append_execution_log(
+                        plan_id,
+                        {
+                            "event": "step_completed",
+                            "plan_id": plan_id,
+                            "step_id": step.step_id,
+                            "tool": step.tool,
+                            "success": tool_result.success,
+                            "error": tool_result.error,
+                        },
+                    )
+                except FileNotFoundError:
+                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "plans/execute workspace log append failed for %s: %s", plan_id, exc
+                    )
+                    await audit.append(
+                        kind="plan",
+                        input_summary=f"Workspace update failed on execute step: {plan_id}",
+                        result_summary=f"warning={str(exc)[:200]}",
+                    )
+                await audit.append(
+                    kind="plan",
+                    input_summary=f"Plan step {step.step_id} tool={step.tool} plan={plan_id}",
+                    result_summary=(
+                        "ok"
+                        if tool_result.success
+                        else (tool_result.error or "error")[:200]
+                    ),
+                )
 
-    return response_body
+            ok_steps = sum(1 for s in step_results if s["status"] == "ok")
+            err_steps = len(step_results) - ok_steps
+            exec_status = "executed_success" if err_steps == 0 else "executed_with_errors"
+
+            response_body = {
+                "status": exec_status,
+                "plan_id": plan_id,
+                "steps": step_results,
+            }
+
+            _mark_executed_body(plan_id, result=response_body)
+            try:
+                append_execution_log(
+                    plan_id,
+                    {
+                        "event": "execution_completed",
+                        "plan_id": plan_id,
+                        "status": exec_status,
+                    },
+                )
+                step_lines = "\n".join(
+                    (
+                        f"- `{s['step_id']}` / `{s['tool']}`: {s['status']}"
+                        + (
+                            f" — {(s['result'].get('error') or 'error')}"
+                            if s["status"] == "error"
+                            else ""
+                        )
+                    )
+                    for s in step_results
+                ) or "- (no steps)"
+                for s in step_results:
+                    step_result = s.get("result")
+                    if not isinstance(step_result, dict):
+                        continue
+                    step_data = step_result.get("data")
+                    if not isinstance(step_data, dict):
+                        continue
+                    if step_data.get("proposal_only") is not True:
+                        continue
+                    patch_text = step_data.get("patch")
+                    if not isinstance(patch_text, str) or not patch_text:
+                        continue
+                    target_path = str(step_data.get("path") or "")
+                    summary = str(step_data.get("summary") or "")
+                    applied = bool(step_data.get("applied"))
+                    write_patch_proposal(
+                        plan_id,
+                        target_path=target_path,
+                        summary=summary,
+                        patch=patch_text,
+                        applied=applied,
+                    )
+                    break
+                write_result(
+                    plan_id,
+                    (
+                        "# Result\n\n"
+                        f"- plan id: `{plan_id}`\n"
+                        f"- status: `{exec_status}`\n\n"
+                        "## Step summary\n\n"
+                        f"{step_lines}\n\n"
+                        "## Totals\n\n"
+                        f"- Steps total: {len(step_results)}\n"
+                        f"- Steps ok: {ok_steps}\n"
+                        f"- Steps error: {err_steps}\n"
+                        "\n"
+                        "Execution ran through the installed tool path with registry/schema checks "
+                        "and sandboxed tool execution.\n"
+                    ),
+                )
+                if _workspace_exists_active(plan_id):
+                    move_workspace(plan_id, "completed")
+            except FileNotFoundError:
+                pass
+            except Exception as exc:
+                logger.warning("plans/execute workspace finalize failed for %s: %s", plan_id, exc)
+                await audit.append(
+                    kind="plan",
+                    input_summary=f"Workspace update failed on execute finalize: {plan_id}",
+                    result_summary=f"warning={str(exc)[:200]}",
+                )
+
+            await audit.append(
+                kind="plan",
+                input_summary=f"Plan execution completed: {plan_id}",
+                result_summary=f"status={exec_status}",
+            )
+
+            return response_body
+    except PlanTransitionLockTimeout:
+        raise _plan_transition_locked_exc(plan_id) from None
 
 
 # ──────────────────────────────────────────────────────────────────────────────

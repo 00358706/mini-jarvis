@@ -172,7 +172,7 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `config.py` | Environment-backed settings |
 | `plans.py` | Defines structured plan models; no execution |
 | `policy.py` | Evaluates proposed plans against policy; no execution |
-| `approvals.py` | Stores pending, approved, rejected, and executed plan JSON under `data/plans/` |
+| `approvals.py` | Stores plan JSON under `data/plans/`; per-plan transition locks under `data/plans/locks/<plan_id>.lockdir` |
 | `agent_loader.py` | Reads agent folder metadata from `agents/<id>/`; no code execution from agent dirs |
 | `workspace.py` | Manages task workspace files under `data/workspaces/`; filesystem only |
 | `automation_lab.py` | Writes proposal-only Automation Lab artifacts; no execution/install |
@@ -327,6 +327,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `python scripts/test_plans_from_message_no_execute.py` is a local regression test that fails if `/plans/from-message` crosses into tool execution.
 - `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
+- `python scripts/test_approval_file_locking.py` asserts per-plan transition locks (`data/plans/locks/<plan_id>.lockdir`) and **409** `plan_transition_locked` on approve/reject/execute contention.
 - `python scripts/test_policy_approval_unit_tests.py` exercises `evaluate_plan`, `/plans/*` boundaries, ingest gating, and policy-before-execute ordering (stubbed tools).
 - `python scripts/test_approval_role_keys.py` checks optional `GATEWAY_*_API_KEY` role separation vs master `GATEWAY_API_KEY`.
 - `python scripts/test_plan_builder_generalization.py` exercises generalized `/plans/from-message` (maintainer + media + missing capability + roles) without tool/sandbox/registry side effects.
@@ -429,6 +430,7 @@ Approval and execution remain via the gateway endpoints and wrappers.
 ## Security invariants
 
 - Every route except **`/health`** requires a valid **`X-API-Key`**. **`GATEWAY_API_KEY`** is the **master** key (all routes). Optional role keys restrict clients by route class; keys that are valid but insufficient for a path receive **`403`**. Paths outside the explicit role allowlist are **master-only** (fail closed for future routes).
+- Plan lifecycle JSON under **`data/plans/`** is **hash-bound** for integrity and **per-plan transition locked** via **`data/plans/locks/<plan_id>.lockdir`** (atomic directory create; wait then **409** `plan_transition_locked` on contention). This is a minimal cross-platform filesystem guard, not a database; SQLite remains a possible later option if coordination needs grow.
 - The classifier is constrained to an **allowlist of routing tokens**; free-form model output is not executed as code or routing.
 - Tools run only if they appear in the registry with **`installed`** status; arguments are checked against the registry **`input_schema`** before the sandbox runs.
 - **Tool execution** goes through **`sandbox.run()` → `sandbox_worker`** only; the gateway does not call tool coroutines directly on the ingest path.

@@ -103,7 +103,7 @@ Branch sequence:
    - Hard safety rules: No approve+execute shortcuts; no automatic execution for side-effecting or uncertain actions; model/classifier output must not authorize execution; registry/policy/approval/schema/sandbox remain required before any execution.
 
 2. `approval-state-locking` (**baseline implemented**)
-   - Scope: Bind approval to canonical plan content (`reviewed_plan_sha256` on pending, `approved_plan_sha256` on approved); verify on approve; verify before execute; `409` when a plan was already executed; legacy plans without hashes fail closed until re-proposed.
+   - Scope: Bind approval to canonical plan content (`reviewed_plan_sha256` on pending, `approved_plan_sha256` on approved); verify on approve; verify before execute; `409` when a plan was already executed; legacy plans without hashes fail closed until re-proposed. **Per-plan filesystem transition locks** (`data/plans/locks/<plan_id>.lockdir`, atomic `mkdir`, short wait then **409** `plan_transition_locked`) serialize `save_pending_plan`, `approve_plan`, `reject_plan`, and the full `POST /plans/{plan_id}/execute` critical section through `_mark_executed_body` and immediate persistence/audit that must not duplicate. Tests: `scripts/test_approval_file_locking.py`. SQLite may be considered later if plan coordination grows; not introduced here.
    - Purpose: Prevent stale, swapped, or rewritten plan JSON from inheriting approval or executing twice.
    - Hard safety rules: Approval is not portable across plan edits; workspace files remain evidence, not authority; execution fails closed on missing or mismatched hashes before policy/tools/sandbox; no approve+execute shortcut.
 

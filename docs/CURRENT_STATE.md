@@ -17,9 +17,9 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
   - `GET /plans/pending`
   - `GET /plans/pending/{plan_id}` — includes **`reviewed_plan_sha256`** when present.
   - **`GET /notifications/pending-approvals`** — read-only listing of recent **informational** pending-approval notifications (append-only **`data/notifications/pending_approvals.jsonl`**; latest **200** by default). Notifications do **not** approve or execute (`can_approve` / `can_execute` are always false in records); operators still use explicit approve/execute POSTs with approval-capable keys and valid hashes.
-  - `POST /plans/{plan_id}/approve` — requires **`reviewed_plan_sha256`** on the pending document and verifies it matches a fresh digest; writes **`approved_plan_sha256`**; does not execute.
+  - `POST /plans/{plan_id}/approve` — requires **`reviewed_plan_sha256`** on the pending document and verifies it matches a fresh digest; writes **`approved_plan_sha256`**; does not execute. Uses per-plan transition locks under **`data/plans/locks/<plan_id>.lockdir`** (see `approvals.plan_transition_lock`).
   - `POST /plans/{plan_id}/reject`
-  - `POST /plans/{plan_id}/execute` — requires **`approved_plan_sha256`**, verifies current plan core matches that digest **before** policy or tool/sandbox calls; returns **`409`** with `already_executed` if the plan is already under `executed/`; approval never implies execution.
+  - `POST /plans/{plan_id}/execute` — requires **`approved_plan_sha256`**, verifies current plan core matches that digest **before** policy or tool/sandbox calls; returns **`409`** with `already_executed` if the plan is already under `executed/`; approval never implies execution. The execute handler holds the same per-plan lock from the **already_executed** check through **`_mark_executed_body`** and immediate result persistence/audit so concurrent executes cannot duplicate tool runs; **409** `plan_transition_locked` if the lock cannot be acquired.
 - **Workspace review API (read-only)**
   - `GET /workspaces?state=active|completed|rejected`
   - `GET /workspaces/{state}/{task_id}`
@@ -30,6 +30,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 ## Automated authority-boundary tests (local, no real services)
 - `python scripts/test_policy_approval_unit_tests.py` — `policy.evaluate_plan`, `/plans/propose` (including strict agent allowlist), approve/reject/execute separation, hash preconditions before execution, duplicate-execute `409`, `/plans/from-message` proposal-only, `/ingest` `LOCAL_TOOLS` gating (including that natural-language “approval” text is not authorization). Uses temp plan/workspace dirs and stubs `run_installed_tool` / sandbox paths.
 - `python scripts/test_approval_state_locking.py` — plan content hash binding and fail-closed execute paths.
+- `python scripts/test_approval_file_locking.py` — per-plan `locks/<plan_id>.lockdir` transition serialization; **409** `plan_transition_locked` on contention; execute must not run policy/tools when the lock cannot be acquired.
 - `python scripts/test_ingest_local_tools_gated.py` — ingest `LOCAL_TOOLS` does not call `tools.execute`.
 - `python scripts/test_approval_role_keys.py` — optional role-separated `X-API-Key` behavior (`GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY`) vs master `GATEWAY_API_KEY`.
 - `python scripts/test_plan_builder_generalization.py` — `/plans/from-message` generalized builder (maintainer + media + missing capability + roles) without tool/sandbox/registry mutation.
