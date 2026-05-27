@@ -40,6 +40,23 @@ class _Config:
     local_llm_model: str = os.getenv("LOCAL_LLM_MODEL", "llama3")
     # Hard cap: classifier must respond in this many tokens or fewer.
     classifier_max_tokens: int = int(os.getenv("CLASSIFIER_MAX_TOKENS", "5"))
+    # Tiny advisory router (llama.cpp/OpenAI-compatible). Short prompts only.
+    small_router_base_url: str = os.getenv(
+        "SMALL_ROUTER_BASE_URL", "http://localhost:11430/v1"
+    ).rstrip("/")
+    small_router_model: str = os.getenv("SMALL_ROUTER_MODEL", "qwen3-router")
+    small_router_api_key: str = os.getenv("SMALL_ROUTER_API_KEY", "")
+    small_router_timeout: float = float(os.getenv("SMALL_ROUTER_TIMEOUT", "10.0"))
+    small_router_min_confidence: float = float(
+        os.getenv("SMALL_ROUTER_MIN_CONFIDENCE", "0.0")
+    )
+    small_router_max_context: int = int(os.getenv("SMALL_ROUTER_MAX_CONTEXT", "2048"))
+    small_router_safe_input_tokens: int = int(
+        os.getenv("SMALL_ROUTER_SAFE_INPUT_TOKENS", "1200")
+    )
+    small_router_max_output_tokens: int = int(
+        os.getenv("SMALL_ROUTER_MAX_OUTPUT_TOKENS", "128")
+    )
 
     # ── Cloud LLM (OpenRouter) ────────────────────────────────────────────────
     openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
