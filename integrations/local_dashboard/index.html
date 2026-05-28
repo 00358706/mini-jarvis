@@ -229,8 +229,13 @@
         <h2>2) Propose (from message)</h2>
         <label for="agent">Agent</label>
         <select id="agent">
+          <option value="" selected>Automatic (qwen3-router advisory)</option>
           <option value="project_maintainer_agent">project_maintainer_agent</option>
+          <option value="media_agent">media_agent</option>
         </select>
+        <div class="note">
+          Automatic asks the tiny local router for an advisory route only; the gateway still only proposes a plan. Approval and execution stay separate explicit clicks.
+        </div>
         <div style="height: 8px"></div>
         <label for="message">Message</label>
         <textarea id="message" placeholder="list project files"></textarea>

@@ -29,8 +29,9 @@ _CONTEXT_ERROR_MARKERS: tuple[str, ...] = (
 
 _SYSTEM_PROMPT = """\
 You are a tiny advisory router for Mini-Jarvis.
-Choose exactly one agent id from the supplied list, or manual_agent_required.
-Return only the selected id. You cannot approve, execute, install tools, or set policy.
+Choose exactly one route id from the supplied list, or manual_agent_required.
+Return only compact JSON with keys: route, confidence, reason.
+You cannot approve, execute, install tools, or set policy. Your output is advisory only.
 """
 
 ModelCall = Callable[[list[dict[str, str]], int], Awaitable[str]]
@@ -53,6 +54,7 @@ def estimate_input_tokens(text: str) -> int:
 
 def _manual_fallback(reason: str, *, estimated_input_tokens: int, model_called: bool) -> dict[str, Any]:
     return {
+        "selected_route": "manual_agent_required",
         "selected_agent": "manual_agent_required",
         "reason": reason,
         "authority": False,
@@ -84,16 +86,16 @@ def _looks_like_context_error(exc: BaseException) -> bool:
     return "context" in text or any(marker in text for marker in _CONTEXT_ERROR_MARKERS)
 
 
-def _build_messages(message: str, candidate_agents: list[str]) -> list[dict[str, str]]:
-    agents = ", ".join(candidate_agents) if candidate_agents else "manual_agent_required"
+def _build_messages(message: str, candidate_routes: list[str]) -> list[dict[str, str]]:
+    routes = ", ".join(candidate_routes) if candidate_routes else "manual_agent_required"
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"candidate_agents: {agents}\n"
+                f"candidate_routes: {routes}\n"
                 f"message:\n{message}\n\n"
-                "Select one candidate agent id, or manual_agent_required."
+                "Select one candidate route id, or manual_agent_required."
             ),
         },
     ]
@@ -138,6 +140,123 @@ def _extract_agent(raw: str, candidate_agents: list[str]) -> str:
     except Exception:
         pass
     return "manual_agent_required"
+
+
+def _extract_route_json(raw: str) -> tuple[str, float, str] | None:
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    route = payload.get("route") or payload.get("selected_route") or payload.get("selected_agent")
+    confidence = payload.get("confidence", 0)
+    reason = payload.get("reason", "")
+    if not isinstance(route, str):
+        return None
+    try:
+        confidence_f = float(confidence)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(reason, str):
+        reason = ""
+    return route.strip(), confidence_f, reason.strip()[:300]
+
+
+async def select_route(
+    *,
+    message: str,
+    candidate_routes: list[str],
+    route_to_agent: dict[str, str],
+    manual_agent: str | None = None,
+    model_call: ModelCall | None = None,
+) -> dict[str, Any]:
+    """
+    Select a supported route advisory-only.
+
+    The router sees only route ids and the user message (no tool schemas or
+    secrets). It cannot authorize execution: every return has ``authority``
+    false and no approval/execution flags. Unsafe or unusable outputs fall back
+    to ``manual_agent_required``.
+    """
+    message = message or ""
+    routes = [r for r in candidate_routes if isinstance(r, str) and r.strip()]
+
+    if manual_agent:
+        return {
+            "selected_route": "manual_override",
+            "selected_agent": manual_agent,
+            "reason": "manual_agent_selected",
+            "router_reason": "manual agent override; tiny router bypassed",
+            "confidence": 1.0,
+            "authority": False,
+            "model_called": False,
+            "tiny_router_bypassed": True,
+            "tool_executed": False,
+            "approval_granted": False,
+            "estimated_input_tokens": 0,
+        }
+
+    messages = _build_messages(message, routes)
+    prompt_text = "\n".join(part["content"] for part in messages)
+    estimated = estimate_input_tokens(prompt_text)
+    if _context_budget_exceeded(estimated):
+        return _manual_fallback(
+            "router_context_budget_exceeded",
+            estimated_input_tokens=estimated,
+            model_called=False,
+        )
+
+    call = model_call or _call_llama_cpp
+    try:
+        raw = await call(messages, cfg.small_router_max_output_tokens)
+    except Exception as exc:
+        if _looks_like_context_error(exc):
+            return _manual_fallback(
+                "router_context_budget_exceeded",
+                estimated_input_tokens=estimated,
+                model_called=True,
+            )
+        logger.warning("small_router | model unavailable converted to fallback: %s", exc)
+        return _manual_fallback("router_unavailable", estimated_input_tokens=estimated, model_called=True)
+
+    parsed = _extract_route_json(raw)
+    if parsed is None:
+        fallback = _manual_fallback("router_invalid_json", estimated_input_tokens=estimated, model_called=True)
+        fallback["raw_output"] = raw
+        return fallback
+
+    route, confidence, router_reason = parsed
+    if confidence < cfg.small_router_min_confidence:
+        fallback = _manual_fallback("router_low_confidence", estimated_input_tokens=estimated, model_called=True)
+        fallback.update({"selected_route": route, "confidence": confidence, "router_reason": router_reason})
+        return fallback
+    if route == "manual_agent_required":
+        fallback = _manual_fallback("manual_agent_required", estimated_input_tokens=estimated, model_called=True)
+        fallback.update({"confidence": confidence, "router_reason": router_reason})
+        return fallback
+    if route not in routes:
+        fallback = _manual_fallback("router_unknown_route", estimated_input_tokens=estimated, model_called=True)
+        fallback.update({"selected_route": route, "confidence": confidence, "router_reason": router_reason})
+        return fallback
+    selected_agent = route_to_agent.get(route)
+    if not selected_agent:
+        fallback = _manual_fallback("router_route_has_no_supported_agent", estimated_input_tokens=estimated, model_called=True)
+        fallback.update({"selected_route": route, "confidence": confidence, "router_reason": router_reason})
+        return fallback
+
+    return {
+        "selected_route": route,
+        "selected_agent": selected_agent,
+        "reason": "router_selected",
+        "router_reason": router_reason,
+        "confidence": confidence,
+        "authority": False,
+        "model_called": True,
+        "tool_executed": False,
+        "approval_granted": False,
+        "estimated_input_tokens": estimated,
+    }
 
 
 async def select_agent(

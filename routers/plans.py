@@ -30,6 +30,7 @@ from services.plan_builder import (
     BuildUnsupportedAgent,
     build_plan_from_message,
 )
+from services.small_router import select_route
 from services.workspace_mirror import (
     workspace_exists_active,
     write_workspace_agent_context,
@@ -55,7 +56,7 @@ class PlanRejectRequest(BaseModel):
 
 class PlanFromMessageRequest(BaseModel):
     message: str
-    agent: str
+    agent: str | None = None
     plan_id: str | None = None
 
 
@@ -233,8 +234,7 @@ async def plans_from_message(req: PlanFromMessageRequest):
     import main as _gw
 
     agent = (req.agent or "").strip()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="agent is required.")
+    manual_agent = agent or None
 
     raw_plan_id = (req.plan_id or "").strip() or create_plan_id()
     try:
@@ -245,6 +245,29 @@ async def plans_from_message(req: PlanFromMessageRequest):
     if not message:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="message is required.")
 
+    route_to_agent = {
+        "project_maintenance": "project_maintainer_agent",
+        "media": "media_agent",
+    }
+    routing = await select_route(
+        message=message,
+        candidate_routes=list(route_to_agent.keys()),
+        route_to_agent=route_to_agent,
+        manual_agent=manual_agent,
+    )
+    agent = str(routing.get("selected_agent") or "manual_agent_required")
+    if agent == "manual_agent_required":
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "status": "manual_agent_required",
+                "reason": routing.get("reason") or "manual_agent_required",
+                "detail": "Automatic routing could not safely choose a supported agent. Select an agent manually and propose again.",
+                "routing": routing,
+                "plan_id": plan_id,
+            },
+        )
+
     built = build_plan_from_message(
         message=message,
         agent=agent,
@@ -252,7 +275,16 @@ async def plans_from_message(req: PlanFromMessageRequest):
         installed_tool_names=_gw._installed_tool_names(),
     )
     if isinstance(built, BuildUnsupportedAgent):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=built.detail)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "status": "unsupported_agent",
+                "detail": built.detail,
+                "agent": agent,
+                "routing": routing,
+                "plan_id": plan_id,
+            },
+        )
     elif isinstance(built, BuildMissingCapability):
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -263,6 +295,7 @@ async def plans_from_message(req: PlanFromMessageRequest):
                 "hint": built.hint,
                 "proposal_needed": built.proposal_needed,
                 "agent": agent,
+                "routing": routing,
                 "plan_id": plan_id,
             },
         )
@@ -282,6 +315,7 @@ async def plans_from_message(req: PlanFromMessageRequest):
             "status": status_text,
             "plan_id": plan_id,
             "agent": agent,
+            "routing": routing,
             "policy": policy_obj,
             "workspace": {
                 "state": "rejected",
@@ -296,6 +330,7 @@ async def plans_from_message(req: PlanFromMessageRequest):
         "status": out.get("status", "pending_approval"),
         "plan_id": out.get("plan_id", plan_id),
         "agent": agent,
+        "routing": routing,
         "policy": out.get("policy"),
         "workspace": {
             "state": "active",

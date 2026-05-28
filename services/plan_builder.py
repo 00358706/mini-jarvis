@@ -83,12 +83,34 @@ def _read_only_safety() -> StepSafety:
     )
 
 
-def _base_plan(*, plan_id: str, agent: str, summary: str, tool: str, args: dict, desc: str) -> Plan:
+def _write_review_safety(*, idempotency_key: str | None = None) -> StepSafety:
+    """Evidence-only metadata for side-effecting proposals; execution still requires approval."""
+    return StepSafety(
+        dry_run=False,
+        idempotent=False,
+        idempotency_key=idempotency_key,
+        idempotency_scope="media-library-mutation",
+        rollback_notes="Review exact title before approval; removal would require a separate explicit plan.",
+        compensation_implemented=False,
+    )
+
+
+def _base_plan(
+    *,
+    plan_id: str,
+    agent: str,
+    summary: str,
+    tool: str,
+    args: dict,
+    desc: str,
+    risk: str = "level_0",
+    safety: StepSafety | None = None,
+) -> Plan:
     return Plan(
         plan_id=plan_id,
         summary=_truncate_summary(summary),
         agent=agent,
-        risk="level_0",
+        risk=risk,
         requires_approval=True,
         steps=[
             PlanStep(
@@ -96,7 +118,7 @@ def _base_plan(*, plan_id: str, agent: str, summary: str, tool: str, args: dict,
                 tool=tool,
                 args=args,
                 description=desc,
-                safety=_read_only_safety(),
+                safety=safety or _read_only_safety(),
             )
         ],
         limits=PlanLimits(
@@ -181,6 +203,18 @@ def _extract_media_title_movie(msg: str) -> str | None:
     return None
 
 
+def _extract_media_title_movie_add(msg: str) -> str | None:
+    for pat in (
+        r"(?i)\b(?:add|download)\s+movie\s+(.+)$",
+        r"(?i)\b(?:add|download)\s+(.+?)\s+(?:to|in)\s+radarr\b.*$",
+    ):
+        m = re.search(pat, msg.strip())
+        if m:
+            t = m.group(1).strip().strip('\'"').strip()
+            return t[:200] if t else None
+    return None
+
+
 def _extract_media_title_series(msg: str) -> str | None:
     for pat in (
         r"(?i)\b(?:search|find)\s+for\s+(?:series|show)\s+(.+)$",
@@ -247,6 +281,28 @@ def _build_media_plan(
                 tool="sabnzbd_queue",
                 args={},
                 desc="Read SABnzbd download queue status (lookup only until approved and executed).",
+            )
+        )
+
+    movie_add_title = _extract_media_title_movie_add(msg)
+    if movie_add_title:
+        if "radarr_add" not in installed_tool_names:
+            return BuildMissingCapability(
+                reason_code="tool_not_installed",
+                detail="radarr_add is not installed in the registry.",
+                hint=_AUTOMATION_LAB_HINT,
+                proposal_needed=True,
+            )
+        return BuildPlanOk(
+            plan=_base_plan(
+                plan_id=plan_id,
+                agent=agent,
+                summary=msg,
+                tool="radarr_add",
+                args={"title": movie_add_title},
+                desc="Propose adding a movie to Radarr. This is proposal-only until separately approved and executed.",
+                risk="level_2",
+                safety=_write_review_safety(idempotency_key=f"radarr_add:{movie_add_title.lower()}"),
             )
         )
 
