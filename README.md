@@ -284,6 +284,7 @@ Current `main.py` routes:
 | `OPENROUTER_API_KEY` | API key for `CLOUD_LLM` |
 | `CLOUD_MODEL` | OpenRouter model slug |
 | `RADARR_URL` / `RADARR_API_KEY` | Radarr |
+| `RADARR_ROOT_FOLDER_PATH` / `RADARR_QUALITY_PROFILE_ID` | Defaults used by `radarr_add` payload (`/media/movies` and `6` in `.env.example` / config fallback) |
 | `SONARR_URL` / `SONARR_API_KEY` | Sonarr |
 | `SABNZBD_URL` / `SABNZBD_API_KEY` | SABnzbd |
 | `OLLAMA_TIMEOUT` / `CLOUD_TIMEOUT` / `TOOL_TIMEOUT` | HTTP timeouts in seconds |
@@ -330,6 +331,7 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `powershell -ExecutionPolicy Bypass -File .\scripts\test_external_ui_flow.ps1` simulates a safe external UI/client flow through proposal, review, explicit approval, explicit execution, and completed result review.
 - On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
 - `python scripts/test_tool_http_allowlist_guard.py` fails if tool execution modules import raw HTTP clients (`requests`, `httpx`, etc.) outside `tools_http.py`.
+- `python scripts/test_radarr_add_config_defaults.py` verifies `radarr_add` builds its JSON payload from config/env defaults using a fake HTTP client; it does not contact Radarr or add a movie.
 - `python scripts/test_router_split_regression.py` checks OpenAPI paths and auth-role mapping after the `routers/` split (no live traffic).
 - `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.

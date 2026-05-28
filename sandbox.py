@@ -269,6 +269,8 @@ SANDBOX_TOOL_ENV_INJECT_KEYS: frozenset[str] = frozenset(
     {
         "RADARR_URL",
         "RADARR_API_KEY",
+        "RADARR_ROOT_FOLDER_PATH",
+        "RADARR_QUALITY_PROFILE_ID",
         "SONARR_URL",
         "SONARR_API_KEY",
         "SABNZBD_URL",

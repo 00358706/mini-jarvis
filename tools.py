@@ -23,6 +23,7 @@ from typing import Any
 import registry as reg
 import sandbox
 import tools_http
+from config import cfg
 from http_allowlist import validate_http_destination
 from models import NormalisedEnvelope, ToolResult
 
@@ -81,11 +82,9 @@ async def radarr_add(args: dict) -> ToolResult:
         return ToolResult(
             tool_name="radarr_add", success=False, error="No title provided."
         )
-    import os
-
-    api_key = os.getenv("RADARR_API_KEY", "")
-    url = os.getenv("RADARR_URL", "http://localhost:7878")
-    timeout = float(os.getenv("TOOL_TIMEOUT", "15"))
+    api_key = cfg.radarr_api_key
+    url = cfg.radarr_url
+    timeout = cfg.tool_timeout
     lookup_url = f"{url}/api/v3/movie/lookup"
     blocked = _http_policy_block("radarr_add", lookup_url, url)
     if blocked:
@@ -107,8 +106,8 @@ async def radarr_add(args: dict) -> ToolResult:
     payload = {
         "title": movie["title"],
         "tmdbId": movie["tmdbId"],
-        "qualityProfileId": 1,
-        "rootFolderPath": "/movies",
+        "qualityProfileId": cfg.radarr_quality_profile_id,
+        "rootFolderPath": cfg.radarr_root_folder_path,
         "monitored": True,
         "addOptions": {"searchForMovie": True},
         "apikey": api_key,

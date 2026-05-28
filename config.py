@@ -70,6 +70,8 @@ class _Config:
     # ── Media Automation ──────────────────────────────────────────────────────
     radarr_url: str = os.getenv("RADARR_URL", "http://localhost:7878")
     radarr_api_key: str = os.getenv("RADARR_API_KEY", "")
+    radarr_root_folder_path: str = os.getenv("RADARR_ROOT_FOLDER_PATH", "/media/movies")
+    radarr_quality_profile_id: int = int(os.getenv("RADARR_QUALITY_PROFILE_ID", "6"))
     sonarr_url: str = os.getenv("SONARR_URL", "http://localhost:8989")
     sonarr_api_key: str = os.getenv("SONARR_API_KEY", "")
     sabnzbd_url: str = os.getenv("SABNZBD_URL", "http://localhost:8090")
