@@ -30,7 +30,7 @@ Then open:
 
 In the UI:
 1. Set **Gateway base URL** and **API key** (kept in memory / session only).
-2. Propose a plan via `POST /plans/from-message`.
+2. Propose a plan via `POST /plans/from-message`; leave **Agent** on **Automatic** for advisory qwen3-router selection, or choose an explicit agent to bypass the tiny router.
 3. List pending plans via `GET /plans/pending`.
 4. Show compact review via `GET /workspaces/active/<plan_id>/compact`.
 5. Approve via `POST /plans/<plan_id>/approve` (explicit click).

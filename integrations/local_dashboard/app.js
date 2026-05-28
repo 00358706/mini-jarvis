@@ -144,11 +144,14 @@ async function onPropose() {
   setOut("outPropose", "");
   try {
     const planId = `ui_dash_${new Date().toISOString().replace(/[:.]/g, "")}`;
+    const selectedAgent = $("agent").value;
     const body = {
       message: $("message").value.trim() || "list project files",
-      agent: $("agent").value,
       plan_id: planId,
     };
+    if (selectedAgent) {
+      body.agent = selectedAgent;
+    }
     const proposal = await apiFetch("POST", "/plans/from-message", body);
     setOut("outPropose", capText(pretty(proposal), 4000));
     if (proposal?.plan_id) $("planId").value = proposal.plan_id;
@@ -452,6 +455,12 @@ function init() {
   $("btnHealth").addEventListener("click", onHealth);
   $("btnPending").addEventListener("click", onPending);
   $("btnPropose").addEventListener("click", onPropose);
+  $("message").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      onPropose();
+    }
+  });
   $("btnShowActive").addEventListener("click", () => onShowCompact("active"));
   $("btnShowCompleted").addEventListener("click", () => onShowCompact("completed"));
   $("btnShowResult").addEventListener("click", onShowResultPreview);

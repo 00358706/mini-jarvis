@@ -48,7 +48,7 @@ class _Config:
     small_router_api_key: str = os.getenv("SMALL_ROUTER_API_KEY", "")
     small_router_timeout: float = float(os.getenv("SMALL_ROUTER_TIMEOUT", "10.0"))
     small_router_min_confidence: float = float(
-        os.getenv("SMALL_ROUTER_MIN_CONFIDENCE", "0.0")
+        os.getenv("SMALL_ROUTER_MIN_CONFIDENCE", "0.60")
     )
     small_router_max_context: int = int(os.getenv("SMALL_ROUTER_MAX_CONTEXT", "2048"))
     small_router_safe_input_tokens: int = int(
