@@ -51,8 +51,10 @@ class _FakeClient:
         self._calls.append(("GET", url, params))
         return _FakeResponse([{"title": "Arrival", "tmdbId": 329865, "year": 2016}])
 
-    async def post(self, url: str, *, json: dict[str, Any]) -> _FakeResponse:
-        self._calls.append(("POST", url, json))
+    async def post(
+        self, url: str, *, params: dict[str, Any], json: dict[str, Any]
+    ) -> _FakeResponse:
+        self._calls.append(("POST", url, {"params": params, "json": json}))
         return _FakeResponse({"id": 123})
 
 
@@ -62,7 +64,7 @@ def _load_tools_with_env(env: dict[str, str]):
             os.environ[key] = env[key]
         else:
             os.environ.pop(key, None)
-    for module_name in ("config", "tools"):
+    for module_name in ("config", "sandbox", "tools"):
         sys.modules.pop(module_name, None)
     return importlib.import_module("tools")
 
@@ -91,10 +93,12 @@ def test_radarr_add_uses_explicit_env_defaults() -> None:
     assert result.success, result
     posts = [call for call in calls if call[0] == "POST"]
     assert len(posts) == 1, calls
-    payload = posts[0][2]
+    payload = posts[0][2]["json"]
+    params = posts[0][2]["params"]
     assert payload["rootFolderPath"] == "/media/movies"
     assert payload["qualityProfileId"] == 6
     assert payload["apikey"] == "test-key"
+    assert params["apikey"] == "test-key"
 
 
 def test_radarr_add_uses_configured_fallbacks_when_env_unset() -> None:
@@ -103,7 +107,7 @@ def test_radarr_add_uses_configured_fallbacks_when_env_unset() -> None:
     assert result.success, result
     posts = [call for call in calls if call[0] == "POST"]
     assert len(posts) == 1, calls
-    payload = posts[0][2]
+    payload = posts[0][2]["json"]
     assert payload["rootFolderPath"] == "/media/movies"
     assert payload["qualityProfileId"] == 6
 

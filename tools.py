@@ -118,7 +118,7 @@ async def radarr_add(args: dict) -> ToolResult:
         return blocked_post
     try:
         async with tools_http.async_http_client(timeout=timeout) as client:
-            resp = await client.post(post_url, json=payload)
+            resp = await client.post(post_url, params={"apikey": api_key}, json=payload)
             resp.raise_for_status()
     except tools_http.HTTPError as exc:
         return ToolResult(tool_name="radarr_add", success=False, error=str(exc))
