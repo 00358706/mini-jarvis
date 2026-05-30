@@ -454,7 +454,10 @@ function init() {
   $("btnSetKey").addEventListener("click", onSetKey);
   $("btnHealth").addEventListener("click", onHealth);
   $("btnPending").addEventListener("click", onPending);
-  $("btnPropose").addEventListener("click", onPropose);
+  $("proposalForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    onPropose();
+  });
   $("message").addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();

@@ -32,6 +32,7 @@
         position: sticky;
         top: 0;
         backdrop-filter: blur(8px);
+        z-index: 20;
       }
       header h1 {
         margin: 0;
@@ -56,6 +57,17 @@
         background: var(--card);
         border-radius: 10px;
         padding: 14px;
+      }
+      .chatbar-card {
+        grid-column: 1 / -1;
+        position: sticky;
+        top: 78px;
+        z-index: 10;
+        border-color: rgba(96, 165, 250, 0.42);
+        background:
+          radial-gradient(circle at top left, rgba(96, 165, 250, 0.18), transparent 32%),
+          rgba(17, 24, 39, 0.96);
+        box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
       }
       .card h2 {
         margin: 0 0 10px 0;
@@ -84,6 +96,32 @@
       textarea {
         min-height: 70px;
         resize: vertical;
+      }
+      .chatbar-form {
+        display: grid;
+        grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: end;
+      }
+      .chatbar-input textarea {
+        min-height: 52px;
+        max-height: 160px;
+        border-radius: 16px;
+        padding-right: 14px;
+        font-size: 14px;
+      }
+      .chatbar-action button {
+        min-height: 52px;
+        border-radius: 16px;
+        padding: 0 18px;
+        background: rgba(96, 165, 250, 0.22);
+      }
+      .chatbar-note {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        align-items: center;
       }
       .row {
         display: grid;
@@ -188,6 +226,15 @@
         main {
           grid-template-columns: 1fr;
         }
+        .chatbar-card {
+          top: 86px;
+        }
+        .chatbar-form {
+          grid-template-columns: 1fr;
+        }
+        .chatbar-action button {
+          width: 100%;
+        }
       }
     </style>
   </head>
@@ -201,8 +248,35 @@
     </header>
 
     <main>
+      <section class="card chatbar-card" aria-labelledby="proposalTitle">
+        <h2 id="proposalTitle">1) Ask Mini-Jarvis</h2>
+        <form id="proposalForm" class="chatbar-form">
+          <div>
+            <label for="agent">Agent</label>
+            <select id="agent">
+              <option value="" selected>Automatic (qwen3-router advisory)</option>
+              <option value="project_maintainer_agent">project_maintainer_agent</option>
+              <option value="media_agent">media_agent</option>
+            </select>
+          </div>
+          <div class="chatbar-input">
+            <label for="message">Message</label>
+            <textarea id="message" placeholder="Ask for a plan, e.g. list project files"></textarea>
+          </div>
+          <div class="chatbar-action">
+            <button id="btnPropose" type="submit">Propose plan</button>
+          </div>
+        </form>
+        <div class="note chatbar-note">
+          <span>Enter proposes only; Shift+Enter adds a new line.</span>
+          <span>Automatic is advisory only. The gateway still proposes a plan.</span>
+          <span>Approve and Execute remain separate explicit buttons below.</span>
+        </div>
+        <pre id="outPropose"></pre>
+      </section>
+
       <section class="card">
-        <h2>1) Connection</h2>
+        <h2>2) Connection</h2>
         <div class="row">
           <div>
             <label for="baseUrl">Gateway base URL</label>
@@ -223,26 +297,6 @@
           <code>serve_dashboard.py</code>) so the gateway does not need CORS changes.
         </div>
         <pre id="outConn"></pre>
-      </section>
-
-      <section class="card">
-        <h2>2) Propose (from message)</h2>
-        <label for="agent">Agent</label>
-        <select id="agent">
-          <option value="" selected>Automatic (qwen3-router advisory)</option>
-          <option value="project_maintainer_agent">project_maintainer_agent</option>
-          <option value="media_agent">media_agent</option>
-        </select>
-        <div class="note">
-          Automatic asks the tiny local router for an advisory route only; the gateway still only proposes a plan. Approval and execution stay separate explicit clicks.
-        </div>
-        <div style="height: 8px"></div>
-        <label for="message">Message</label>
-        <textarea id="message" placeholder="list project files"></textarea>
-        <div class="btns">
-          <button id="btnPropose">Propose plan (no approve, no execute)</button>
-        </div>
-        <pre id="outPropose"></pre>
       </section>
 
       <section class="card">
