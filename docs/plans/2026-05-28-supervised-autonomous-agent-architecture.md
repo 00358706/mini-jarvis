@@ -8,6 +8,8 @@
 
 **Tech Stack:** FastAPI, Pydantic, local filesystem task/workspace state, existing registry/policy/approval/sandbox modules, local small-router model for advisory routing, optional stronger planner model for proposal drafting.
 
+**Example scope note:** Media/Radarr/Sonarr/SABnzbd flows in this plan are illustrative optional/local capability-pack examples. They are not the definition of Mini-Jarvis core, which remains the supervised local automation gateway/control plane and authority boundary.
+
 ---
 
 ## North Star

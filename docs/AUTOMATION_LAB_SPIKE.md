@@ -14,7 +14,7 @@ Static capability fixture lookup can also be enabled explicitly to enrich capabi
 powershell -ExecutionPolicy Bypass -File .\scripts\automation_lab_propose.ps1 -Message "Create a tool to list new Navidrome releases"
 ```
 
-The command prints JSON containing the `request_id`, output folder, artifact list, classification, and authority-boundary flags.
+The Navidrome wording here is an offline local-service capability-pack example only, not core gateway functionality. The command prints JSON containing the `request_id`, output folder, artifact list, classification, and authority-boundary flags.
 
 Optional local model drafting against an OpenAI-compatible local runtime:
 

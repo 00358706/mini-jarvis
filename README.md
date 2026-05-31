@@ -1,6 +1,6 @@
 # mini-jarvis (Agentic Gateway)
 
-A small **local-first control plane** for safe agentic workflows. It has a gateway for multimodal **input and routing**, a plan/policy/approval path for reviewed work, proposal-only authoring lanes for future capabilities, and a sandboxed execution boundary for installed tools. It targets a homelab stack (Radarr, Sonarr, SABnzbd) plus local project-maintenance workflows with structured responses and an audit trail.
+A small **supervised local automation gateway/control plane** for safe agentic workflows. It defines the request envelope and routing contract, plan/policy/approval lifecycle, capability registry, evidence/workspace model, sandbox/side-effect boundary, dashboard shell, self-maintenance/proposal lanes, and unified capability control levels. Optional local capability-pack examples currently include ARR/Radarr/Sonarr/SABnzbd/Jellyfin-style media automation, Navidrome/music, PlantNet, Spotify, and other personal/local integrations.
 
 ---
 
@@ -145,7 +145,7 @@ Tool implementations live in `tools.py`, but the **parent gateway process does n
 
 ## `http_allowlist.py` and `tools_http.py`
 
-Built-in tools reach Radarr, Sonarr, and SABnzbd through **`tools_http.py`** (central **`httpx`**). Before each request, **`validate_http_destination()`** in `http_allowlist.py` checks the full URL against the **configured base URL** (same scheme, host, port, and path prefix). That blocks accidental requests to arbitrary hosts; it is **not** a substitute for OS-level network isolation. A static test (`scripts/test_tool_http_allowlist_guard.py`) fails if `tools.py` / `sandbox.py` / `sandbox_worker.py` import raw HTTP clients directly. Future work may move registry `http_allowlist` enforcement into `tools_http`; this branch does not claim that yet.
+Currently included optional/local media example tools reach Radarr, Sonarr, and SABnzbd through **`tools_http.py`** (central **`httpx`**). Before each request, **`validate_http_destination()`** in `http_allowlist.py` checks the full URL against the **configured base URL** (same scheme, host, port, and path prefix). That blocks accidental requests to arbitrary hosts; it is **not** a substitute for OS-level network isolation. A static test (`scripts/test_tool_http_allowlist_guard.py`) fails if `tools.py` / `sandbox.py` / `sandbox_worker.py` import raw HTTP clients directly. Future work may move registry `http_allowlist` enforcement into `tools_http`; this branch does not claim that yet.
 
 ---
 
@@ -198,7 +198,7 @@ Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack: human → gateway �
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env — at minimum set GATEWAY_API_KEY; set Ollama and media keys as needed.
+# Edit .env — at minimum set GATEWAY_API_KEY; set Ollama and optional capability-pack keys as needed.
 python main.py
 # or: uvicorn main:app --host 0.0.0.0 --port 8000
 ```
@@ -246,7 +246,7 @@ Current `main.py` routes:
 | `GET` | `/health` | unauthenticated health/status |
 | `POST` | `/ingest` | normalise, classify, route, and return a gateway response |
 | `POST` | `/plans/propose` | policy-check and store pending plan with server `reviewed_plan_sha256`; strips client hash fields; no execution |
-| `POST` | `/plans/from-message` | deterministic plan builder (`services/plan_builder.py`) → `POST /plans/propose`; supports `project_maintainer_agent` and `media_agent`; **400** `missing_capability` when no installed tool matches; no approval or execution |
+| `POST` | `/plans/from-message` | deterministic plan builder (`services/plan_builder.py`) → `POST /plans/propose`; supports `project_maintainer_agent` and currently included optional/local example `media_agent`; **400** `missing_capability` when no installed tool matches; no approval or execution |
 | `GET` | `/plans/pending` | list pending plan ids |
 | `GET` | `/plans/pending/{plan_id}` | read one pending plan (includes `reviewed_plan_sha256` when present) |
 | `GET` | `/notifications/pending-approvals` | read-only: latest pending-approval **informational** notifications (append-only JSONL source); not an approval or execution surface |
@@ -283,10 +283,10 @@ Current `main.py` routes:
 | `CLASSIFIER_MAX_TOKENS` | Max tokens for classifier output |
 | `OPENROUTER_API_KEY` | API key for `CLOUD_LLM` |
 | `CLOUD_MODEL` | OpenRouter model slug |
-| `RADARR_URL` / `RADARR_API_KEY` | Radarr |
-| `RADARR_ROOT_FOLDER_PATH` / `RADARR_QUALITY_PROFILE_ID` | Defaults used by `radarr_add` payload (`/media/movies` and `6` in `.env.example` / config fallback) |
-| `SONARR_URL` / `SONARR_API_KEY` | Sonarr |
-| `SABNZBD_URL` / `SABNZBD_API_KEY` | SABnzbd |
+| `RADARR_URL` / `RADARR_API_KEY` | Optional local media capability-pack example: Radarr |
+| `RADARR_ROOT_FOLDER_PATH` / `RADARR_QUALITY_PROFILE_ID` | Optional local media capability-pack defaults used by `radarr_add` payload (`/media/movies` and `6` in `.env.example` / config fallback) |
+| `SONARR_URL` / `SONARR_API_KEY` | Optional local media capability-pack example: Sonarr |
+| `SABNZBD_URL` / `SABNZBD_API_KEY` | Optional local media capability-pack example: SABnzbd |
 | `OLLAMA_TIMEOUT` / `CLOUD_TIMEOUT` / `TOOL_TIMEOUT` | HTTP timeouts in seconds |
 
 Comment-only placeholders in `.env.example` are optional/future: `CLOUD_ALLOW_SENSITIVE`, `ENABLE_SANDBOX_PYTHON_EXEC`.
@@ -303,7 +303,7 @@ Replace `your-secret-key` with `GATEWAY_API_KEY` from `.env`.
 curl http://localhost:8000/health
 ```
 
-**2. Ingest — tool-intent hint** (when the classifier routes to `LOCAL_TOOLS`, for example Radarr-like text, the gateway returns a **gated** response: `lane: plan_proposal_required`, no tool execution, no sandbox; use `/plans/*` for execution):
+**2. Ingest — tool-intent hint** (when the classifier routes to `LOCAL_TOOLS`, for example optional local media/Radarr-like text, the gateway returns a **gated** response: `lane: plan_proposal_required`, no tool execution, no sandbox; use `/plans/*` for execution):
 
 ```bash
 curl -X POST http://localhost:8000/ingest \
@@ -331,14 +331,14 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 - `powershell -ExecutionPolicy Bypass -File .\scripts\test_external_ui_flow.ps1` simulates a safe external UI/client flow through proposal, review, explicit approval, explicit execution, and completed result review.
 - On Linux/macOS, `scripts/test_plans_from_message.sh` mirrors the `/plans/from-message` PowerShell smoke test.
 - `python scripts/test_tool_http_allowlist_guard.py` fails if tool execution modules import raw HTTP clients (`requests`, `httpx`, etc.) outside `tools_http.py`.
-- `python scripts/test_radarr_add_config_defaults.py` verifies `radarr_add` builds its JSON payload from config/env defaults using a fake HTTP client; it does not contact Radarr or add a movie.
+- `python scripts/test_radarr_add_config_defaults.py` verifies the optional local media example tool `radarr_add` builds its JSON payload from config/env defaults using a fake HTTP client; it does not contact Radarr or add a movie.
 - `python scripts/test_router_split_regression.py` checks OpenAPI paths and auth-role mapping after the `routers/` split (no live traffic).
 - `python scripts/test_ingest_local_tools_gated.py` fails if `/ingest` with `LOCAL_TOOLS` calls `tools.execute` or `sandbox.run`, or if `dispatch.py` reintroduces a direct `tools_execute` reference.
 - `python scripts/test_approval_state_locking.py` locks plan content hashes on propose/approve, fail-closed execute on mismatch or missing hash, duplicate-execute `409`, and rejects legacy pending without `reviewed_plan_sha256`.
 - `python scripts/test_approval_file_locking.py` asserts per-plan transition locks (`data/plans/locks/<plan_id>.lockdir`) and **409** `plan_transition_locked` on approve/reject/execute contention.
 - `python scripts/test_policy_approval_unit_tests.py` exercises `evaluate_plan`, `/plans/*` boundaries, ingest gating, and policy-before-execute ordering (stubbed tools).
 - `python scripts/test_approval_role_keys.py` checks optional `GATEWAY_*_API_KEY` role separation vs master `GATEWAY_API_KEY`.
-- `python scripts/test_plan_builder_generalization.py` exercises generalized `/plans/from-message` (maintainer + media + missing capability + roles) without tool/sandbox/registry side effects.
+- `python scripts/test_plan_builder_generalization.py` exercises generalized `/plans/from-message` (maintainer + optional media examples + missing capability + roles) without tool/sandbox/registry side effects.
 - `python scripts/test_plan_step_idempotency_dry_run.py` covers `StepSafety` defaults/validation, deterministic builder read-only metadata, `PLAN.json` persistence, compact workspace passthrough, and proves **`dry_run` does not skip execution**.
 - The script calls `/health`, `/plans/pending`, `/plans/propose`, `/plans/pending/{plan_id}`, and `/plans/{plan_id}/reject`.
 - It checks that a plan can be policy-checked, saved as pending, read back, rejected, and removed from pending.
@@ -356,8 +356,8 @@ curl -H "X-API-Key: your-secret-key" http://localhost:8000/tools
 Convenience endpoint for Open WebUI or other local frontends to **create a proposed plan from a user message**.
 It uses **`services/plan_builder.py`** (deterministic, rule-based): allowlisted agents only, registry **installed** tool names as capability truth (no invented tools). Emitted steps include read-only **`safety`** metadata for review (evidence only; execute does not branch on `dry_run`). It does **not** approve plans, execute tools, call the sandbox, or mutate the registry.
 
-- **Supported agents:** `project_maintainer_agent` (repository list/search/inspect paths, unchanged intent) and `media_agent` (safe mappings such as movie/series search and SABnzbd queue when the corresponding tools are **installed**).
-- **Missing capability:** requests such as Navidrome album browsing with no installed handler return **400** JSON with `status: "missing_capability"`, `proposal_needed: true`, and a hint toward Automation Lab / explicit tool work — **no** pending plan and **no** notification append.
+- **Supported agents:** `project_maintainer_agent` (repository list/search/inspect paths, unchanged intent) and the currently included optional/local example `media_agent` (safe mappings such as movie/series search and SABnzbd queue when the corresponding tools are **installed**).
+- **Missing capability:** optional capability-pack examples such as Navidrome album browsing with no installed handler return **400** JSON with `status: "missing_capability"`, `proposal_needed: true`, and a hint toward Automation Lab / explicit tool work — **no** pending plan and **no** notification append.
 - **Unsupported agent:** **400** with FastAPI `detail` (same shape as before for unknown agents).
 - Successful builds route through **`POST /plans/propose`** (policy, workspace mirror, pending + notification as today).
 
