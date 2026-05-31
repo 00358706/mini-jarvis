@@ -189,7 +189,7 @@ If you use Cursor with project-scoped rules, keep a **`CURSOR_RULES.md`** at the
 | `scripts/automation_lab_generate_tool_candidate.ps1` | Emits review-only candidate drafts under an existing tool build workspace |
 | `scripts/test_automation_lab_tool_candidate_generation.ps1` | Static/filesystem safety coverage for candidate generation |
 
-Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack: human → gateway → agent context → planner → policy → registry → approval/session → sandbox → tools → audit.
+Also see `docs/AI_OS_HIERARCHY.md` for the conceptual stack: human → gateway → agent context → planner → policy → registry → approval/session → sandbox → tools → audit. The refreshed roadmap is in `docs/BACKLOG.md`.
 
 ---
 

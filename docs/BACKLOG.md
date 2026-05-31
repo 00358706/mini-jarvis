@@ -12,11 +12,79 @@ Before implementing anything here, read:
 - `docs/ENVIRONMENT.md`
 - `docs/wiki/README.md`
 
-## Current recommended next branch
+## Current phase
 
-No single “next branch” is recommended right now. Pick a backlog item explicitly and keep changes small and branch-scoped.
+Mini-Jarvis is a **supervised local automation gateway/control plane**. It is not a general chatbot, not an autonomous coding agent, and not a media automation app.
 
-## Near-term backlog
+Core scope is the request envelope and routing contract, gateway authority, policy, approval lifecycle, capability registry, evidence/workspaces, sandbox/side-effect boundary, dashboard shell, self-maintenance/proposal lanes, unified capability control levels, and the supervised worker-loop contract.
+
+Optional/local capability packs and examples may include Radarr/Sonarr/SABnzbd/Jellyfin, Navidrome/music, PlantNet, Spotify, and other personal/local integrations. These are **not Mini-Jarvis core**.
+
+## Implemented foundation
+
+Recent foundation work has established or documented:
+
+- Gateway-owned plan/policy/approval/registry/sandbox authority boundaries.
+- Gated `/ingest` behavior: no direct tool execution from `/ingest` for `LOCAL_TOOLS`.
+- Approval hash binding, per-plan transition locks, and duplicate-execute protection.
+- Role-separated API keys for input/proposal, approval/execution, and registry lifecycle.
+- Proposal-only `/plans/from-message`, advisory tiny-router selection, and dashboard control-surface checks.
+- Automation Lab proposal/review lanes, generated-tool review artifacts, static harnesses, install-review packaging, metadata-only generated registry records, and dry-run evidence.
+- Readable workspaces as evidence, not authority.
+- Architecture invariants, unified capability control levels, and the supervised worker-loop contract.
+
+Historical implemented branch details remain below under **Implemented foundation / historical branch record and detailed backlog**.
+
+## Current recommended next work
+
+1. `capability-pack-boundary-refactor`
+   - Prepare an optional capability-pack structure.
+   - Make no runtime behavior change first.
+   - Do not break the current local Radarr flow.
+   - Keep media/music/PlantNet/Spotify/personal integrations optional, not core.
+
+2. `worker-loop-operator-scripts`
+   - Formalize task packet/report workflow for **Hermes, Codex, Cursor, and ChatGPT**.
+   - Local-only first.
+   - No gateway authority bypass.
+   - Workers may draft, edit, test, or summarize; Mini-Jarvis remains the authority layer.
+
+3. `startup-runtime-cleanup`
+   - Standardize on one tiny llama router.
+   - Make gateway/dashboard startup reliable.
+   - Avoid unrelated architecture changes.
+
+## Near-term roadmap
+
+- Preserve strict gateway authority while improving operator ergonomics.
+- Move optional integrations behind clearer capability-pack boundaries.
+- Convert supervised worker-loop docs into local operator scripts and report templates before adding any runtime worker/queue behavior.
+- Improve startup/runtime reliability without changing approval or execution semantics.
+- Continue docs-first design for task state, routines, adapters, generated-tool execution, and policy/risk improvements.
+
+## Deferred / later
+
+- Runtime task state and autonomous run loop.
+- Generated-tool callable dispatch.
+- Runtime Navidrome or other optional capability-pack integrations.
+- Routine runtime and scheduler behavior.
+- Broader policy/risk model and structured action evidence runtime implementation.
+- Workspace archive/compaction mutation flows.
+- Linux/systemd/network hardening.
+
+## Hard safety rules
+
+- Model output is advisory.
+- Gateway, policy, and registry decide authority.
+- Approval and execution remain separate.
+- No auto-approval.
+- No approve+execute shortcut.
+- No direct tool execution from `/ingest`.
+- No generated-tool execution until explicitly designed.
+- Capability packs are optional, not core.
+- Local runtime data stays local.
+
+## Implemented foundation / historical branch record and detailed backlog
 
 ### Tiny router context budget (implemented on branch)
 
