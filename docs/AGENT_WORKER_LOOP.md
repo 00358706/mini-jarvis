@@ -1,49 +1,38 @@
-# Agent Worker Loop (docs-only contract)
+# Agent Worker Loop
 
-This document describes a future agent worker loop shape for mini-jarvis. It is a design note only and does not change runtime behavior.
+This document defines the supervised worker-loop pattern for Mini-Jarvis, Hermes, Codex, Cursor, and ChatGPT. It is documentation only and does not change runtime behavior.
 
 ## Status
 
-- Docs-only proposal.
+- Docs-only contract.
 - Not implemented in gateway code.
 - Does not grant execution authority.
 - Does not bypass plan, policy, approval, registry, sandbox, or workspace boundaries.
 
-## Purpose
+## Core principle
 
-The agent worker loop is the proposed background coordination layer that would repeatedly observe eligible work, prepare bounded proposals or execution requests, and hand those requests back to the gateway authority layer.
+Mini-Jarvis is the supervised local automation gateway/control plane.
 
-The worker is not an authority boundary. The gateway remains responsible for:
+Workers and models may help classify, draft, edit, test, review, or summarize, but they are not authority. Model output is advisory. The gateway, policy, registry, approval lifecycle, sandbox, and evidence trail remain authoritative.
 
-- Plan validation and persistence.
-- Policy evaluation.
-- Human approval and reviewed-plan hash checks.
-- Registry lookups and tool status checks.
-- Sandboxed execution of installed tools.
-- Audit and workspace lifecycle records.
+## Human and worker roles
 
-## Non-authority rules
+- **User**: Defines the goal, reviews evidence, and gives final approval for commits, pushes, merges, and side effects.
+- **Mini-Jarvis gateway**: Owns the request envelope, routing contract, policy checks, approval lifecycle, registry checks, evidence/workspaces, and sandbox execution boundary.
+- **Hermes**: Coordinates bounded tasks, repeats command loops, writes reports, and stops on ambiguity. Hermes is useful for “keep trying this safe loop until done,” but should not be treated as authority.
+- **Codex**: Produces bounded code or documentation patches from explicit task packets. Codex should not commit, push, delete branches, or broaden scope unless explicitly instructed.
+- **Cursor**: Provides interactive repo navigation, manual review, and human-guided edits. Cursor is useful for inspecting larger context and making precise edits, but is not the source of authority.
+- **ChatGPT**: Helps with planning, architecture review, prompt drafting, and sanity checks. ChatGPT output is advisory.
 
-A worker loop must not:
+## Standard supervised loop
 
-- Approve plans.
-- Execute tools directly.
-- Mutate the registry directly.
-- Treat natural language as authorization.
-- Read secrets beyond explicitly configured runtime needs.
-- Write runtime state outside documented gateway-owned paths.
-- Use filesystem artifacts as authority when gateway state says otherwise.
-
-## Proposed loop shape
-
-A future worker may follow this high-level cycle:
-
-1. Poll or receive a bounded work item from an approved queue/source.
-2. Load only the minimum required context for that item.
-3. Decide whether the next safe action is proposal, review evidence generation, status reporting, or no-op.
-4. If action is needed, call existing gateway APIs instead of touching authority files directly.
-5. Record compact evidence for what was observed and requested.
-6. Stop, back off, or wait for explicit approval when the gateway requires it.
+1. The user defines a goal.
+2. A task packet is written with scope, files, constraints, and stop conditions.
+3. A worker proposes or edits a bounded patch.
+4. A verifier runs checks and summarizes results.
+5. A reviewer inspects the diff and evidence.
+6. The user explicitly approves commit, push, merge, or side effects.
+7. Git and/or Mini-Jarvis records the outcome.
 
 ## Required boundaries
 
@@ -55,6 +44,32 @@ Any implementation should preserve these invariants:
 - Idempotency and retry behavior must be explicit per work item.
 - Concurrency must not duplicate execution or corrupt plan state.
 - Worker errors must fail closed and leave reviewable evidence.
+- No worker may treat natural language as authorization.
+- No worker may mutate the registry directly.
+- No worker may use filesystem artifacts as authority when gateway state says otherwise.
+
+## Git and repo workflow rules
+
+- `main` remains the clean source of truth in `C:\AI\mini-jarvis-prod`.
+- `runtime-main` remains the local runtime mirror in `C:\AI\mini-jarvis`.
+- Use at most one active feature branch at a time unless a branch is intentionally waiting for review.
+- Do not use broad `git add .`.
+- Do not commit, push, merge, reset, or delete branches without explicit approval.
+- Do not trust WSL Git status for Windows worktrees when it disagrees with Windows PowerShell Git.
+- Local runtime data stays local: `.env`, `.venv`, `data`, `logs`, and workspaces are not project source.
+
+## Failure handling
+
+A worker should stop and summarize when it sees:
+
+- Dirty worktree state unless explicitly expected.
+- Git ambiguity.
+- Test or check failure.
+- Prompt/tool quoting errors.
+- Missing files or unexpected paths.
+- Any request that would broaden the approved scope.
+
+Workers should not “fix forward” blindly.
 
 ## Open design questions
 
@@ -63,6 +78,7 @@ Any implementation should preserve these invariants:
 - Backoff, scheduling, and crash recovery behavior.
 - Evidence schema reuse with `docs/ACTION_EVIDENCE_SCHEMA.md`.
 - Relationship to `docs/ROUTINE_CONTRACT.md` for repeatable workflows.
+- Whether Codex/Cursor/Hermes orchestration should become a Mini-Jarvis routine, external script, or local-only operator practice.
 
 ## Implementation note
 
