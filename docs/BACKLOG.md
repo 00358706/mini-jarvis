@@ -71,11 +71,11 @@ Safe first branch:
 
 **Implemented (persistent generated registry metadata):** After install-review packaging, `scripts/automation_lab_install_reviewed_tool.ps1` with explicit phrase `INSTALL_REVIEWED_TOOL` appends metadata to `data/registry/generated_installed_tools.json`; `registry.py` loads those rows at startup. **No** new gateway routes, **no** sandbox/tool execution, **no** `tools.py` dispatch for generated names.
 
-**Implemented (agent-style tool proposal lane, proposal-only):** `scripts/test_agent_tool_proposal_flow.ps1` shows an agent-context Navidrome read-only need entering the Automation Lab `tool_proposal` artifact path via `automation_lab_propose.ps1` only — no install, execution, registry mutation, or dispatch.
+**Implemented (agent-style tool proposal lane, proposal-only):** `scripts/test_agent_tool_proposal_flow.ps1` shows an optional/local Navidrome read-only example need entering the Automation Lab `tool_proposal` artifact path via `automation_lab_propose.ps1` only — no install, execution, registry mutation, or dispatch.
 
 **Implemented (generated-tool dry-run, review-only):** `scripts/automation_lab_generated_tool_dry_run.ps1` plus `scripts/generated_tool_dry_run.py` write evidence under `data/generated_tool_dry_runs/<run_id>/` proving registry metadata vs absence of `tools.py` dispatch; no candidate execution, no registry mutation, no sandbox. This is a **safety/review boundary only**, not approval to execute.
 
-**Implemented (offline Navidrome read-only lifecycle example):** `scripts/test_automation_lab_navidrome_readonly_generated_tool_lifecycle_example.ps1` chains the same lifecycle scripts with a synthetic Navidrome read-only proposal text only; **no** real Navidrome traffic, **no** `tools.py` dispatch, **no** runnable Navidrome integration — review/evidence discipline only.
+**Implemented (offline Navidrome read-only lifecycle example):** `scripts/test_automation_lab_navidrome_readonly_generated_tool_lifecycle_example.ps1` chains the same lifecycle scripts with a synthetic optional/local Navidrome read-only proposal text only; **no** real Navidrome traffic, **no** `tools.py` dispatch, **no** runnable Navidrome integration — review/evidence discipline only.
 
 **Still later:** callable wiring for generated tools (dispatch in `tools.py` or equivalent) and any execution path; execution still requires the normal plan/policy/approval/registry/schema/sandbox path.
 
@@ -139,7 +139,7 @@ Branch sequence:
    - Hard safety rules: Notifications must be informational only; no approve/reject/execute side effects from notification delivery; no auto-approval; no webhooks/scheduler/MCP; JSONL lines are not deduplicated (re-propose appends).
 
 6. `plan-builder-generalization` (**baseline implemented**)
-   - Scope: `services/plan_builder.py` deterministic NL→Plan for `POST /plans/from-message` (maintainer preserved; `media_agent` for installed Radarr/Sonarr/SABnzbd search/queue mappings; `missing_capability` when no installed tool). Tests: `scripts/test_plan_builder_generalization.py`.
+   - Scope: `services/plan_builder.py` deterministic NL→Plan for `POST /plans/from-message` (maintainer preserved; optional/local example `media_agent` for installed Radarr/Sonarr/SABnzbd search/queue mappings; `missing_capability` when no installed tool). Tests: `scripts/test_plan_builder_generalization.py`.
    - Purpose: Give lane-gated inputs a consistent way to become reviewable plan proposals without execution.
    - Hard safety rules: Plan building is proposal-only; it must not approve, execute, install tools, invent uninstalled tools, call real services in tests, or bypass policy/registry checks; `/ingest` stays gated.
 
@@ -432,7 +432,7 @@ Implemented/current slices:
 - `tool-install-review`: install-review packaging writes `INSTALL_MANIFEST.json` / `INSTALL_REVIEW.md` as human review evidence only; it does not install, execute, call sandbox, add dispatch, or add gateway routes.
 - `registry-install-review`: persistent generated registry metadata can be appended only through the explicit `INSTALL_REVIEWED_TOOL` manual confirmation path; install remains metadata-only and is not execution approval.
 - `generated-tool-dry-run`: review-only dry-run evidence proves installed generated metadata against the absence of callable `tools.py` dispatch; it does not import or execute candidate code, call sandbox, mutate registry, or add routes.
-- `navidrome-readonly-tool`: the offline Navidrome read-only lifecycle example exercises the existing build -> candidate -> static harness -> install-review -> manual metadata install -> dry-run flow with synthetic artifacts only; it is not a runnable Navidrome integration.
+- `navidrome-readonly-tool`: the offline optional/local Navidrome read-only lifecycle example exercises the existing build -> candidate -> static harness -> install-review -> manual metadata install -> dry-run flow with synthetic artifacts only; it is not a runnable Navidrome integration.
 
 Prerequisite note:
 Before `generated-callable-dispatch-gate`, `navidrome-runtime-readonly-integration`, or any real runtime generated-tool execution, complete or explicitly defer:
@@ -453,7 +453,7 @@ Remaining focused sequence:
    - Hard safety rules: No automatic or model-driven dispatch; install is not execution approval; execution must still use the normal plan/policy/approval/registry/schema/sandbox path.
 
 3. `navidrome-runtime-readonly-integration`
-   - Scope: Add a real Navidrome read-only runtime integration only after generated callable dispatch rules exist.
+   - Scope: Add a real optional/local Navidrome read-only runtime integration only after generated callable dispatch rules exist.
    - Purpose: Exercise a concrete read-only service integration with explicit environment configuration and no write/download/playback/delete behavior.
    - Hard safety rules: No playlist edits, downloads, deletes, playback control, or unapproved service calls; any real run must use installed registry status and the normal approved execution path.
 

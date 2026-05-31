@@ -27,7 +27,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
   - `GET /workspaces/{state}/{task_id}`
   - `GET /workspaces/{state}/{task_id}/files/{filename}`
 - **Frontend convenience**
-  - `POST /plans/from-message` — deterministic **proposal-only** plan builder in `services/plan_builder.py`: allowlisted agents (`project_maintainer_agent`, `media_agent`), uses **installed** registry tool names as truth (does not invent tools). The request may omit `agent`; in that case the tiny qwen3-router route selection is advisory only and fail-closed to `manual_agent_required`, while explicit `agent` remains a manual override. Successful responses include selected route/agent/reason metadata for UI transparency. On success, routes through `POST /plans/propose` (pending + notification). Returns **400** JSON `manual_agent_required`, `missing_capability`, or `proposal_needed` when no safe automatic route or installed tool matches (e.g. Navidrome catalog intents); **no** pending plan or notification in those cases. Does not execute, approve, call real services, or mutate the registry.
+  - `POST /plans/from-message` — deterministic **proposal-only** plan builder in `services/plan_builder.py`: allowlisted agents (`project_maintainer_agent`, currently included optional/local example `media_agent`), uses **installed** registry tool names as truth (does not invent tools). The request may omit `agent`; in that case the tiny qwen3-router route selection is advisory only and fail-closed to `manual_agent_required`, while explicit `agent` remains a manual override. Successful responses include selected route/agent/reason metadata for UI transparency. On success, routes through `POST /plans/propose` (pending + notification). Returns **400** JSON `manual_agent_required`, `missing_capability`, or `proposal_needed` when no safe automatic route or installed tool matches (e.g. optional Navidrome/music catalog intents); **no** pending plan or notification in those cases. Does not execute, approve, call real services, or mutate the registry.
 
 ## Automated authority-boundary tests (local, no real services)
 - `python scripts/test_policy_approval_unit_tests.py` — `policy.evaluate_plan`, `/plans/propose` (including strict agent allowlist), approve/reject/execute separation, hash preconditions before execution, duplicate-execute `409`, `/plans/from-message` proposal-only, `/ingest` `LOCAL_TOOLS` gating (including that natural-language “approval” text is not authorization). Uses temp plan/workspace dirs and stubs `run_installed_tool` / sandbox paths.
@@ -35,7 +35,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `python scripts/test_approval_file_locking.py` — per-plan `locks/<plan_id>.lockdir` transition serialization; **409** `plan_transition_locked` on contention; execute must not run policy/tools when the lock cannot be acquired.
 - `python scripts/test_ingest_local_tools_gated.py` — ingest `LOCAL_TOOLS` does not call `tools.execute`.
 - `python scripts/test_approval_role_keys.py` — optional role-separated `X-API-Key` behavior (`GATEWAY_INPUT_API_KEY`, `GATEWAY_APPROVAL_API_KEY`, `GATEWAY_ADMIN_API_KEY`) vs master `GATEWAY_API_KEY`.
-- `python scripts/test_plan_builder_generalization.py` — `/plans/from-message` generalized builder (maintainer + media + missing capability + roles) without tool/sandbox/registry mutation.
+- `python scripts/test_plan_builder_generalization.py` — `/plans/from-message` generalized builder (maintainer + optional media examples + missing capability + roles) without tool/sandbox/registry mutation.
 - `python scripts/test_plan_step_idempotency_dry_run.py` — `StepSafety` schema/validation, builder read-only metadata, persistence and compact summary passthrough; **`dry_run` ignored by execute** (contract-only).
 - `python scripts/test_tool_http_allowlist_guard.py` — static scan: tool execution modules must not import `requests` / `httpx` / `aiohttp` / `urllib.request` (use `tools_http.py` only). Not a network sandbox; future work may enforce registry `http_allowlist` inside the helper.
 - `python scripts/test_router_split_regression.py` — after `routers/` split: OpenAPI path presence, sample auth-role classifications, `main.py` composition-root sanity (no stray `@app` HTTP routes beyond `/health`).
@@ -43,10 +43,10 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 
 ## Installed tools (current)
 - **Maintainer (read-only / proposal-only)**: `inspect_file`, `list_project_files`, `search_repo`, `propose_patch`
-- **Media tools**: Radarr/Sonarr/SABnzbd tools (installed tools remain registry-defined; agent allowlists restrict what can be proposed)
+- **Optional/local media example tools**: Radarr/Sonarr/SABnzbd tools (currently included capability-pack example material; installed tools remain registry-defined; agent allowlists restrict what can be proposed)
 
 ## Current agents
-- `media_agent`
+- `media_agent` (currently included optional/local media capability-pack example)
 - `project_maintainer_agent`
 
 ## Current Open WebUI wrappers

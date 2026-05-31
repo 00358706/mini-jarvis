@@ -236,7 +236,7 @@ def execute_http_tool(
 ) -> SandboxResult:
     """
     Call a registered HTTP tool endpoint.
-    Used for tools like Radarr/Sonarr that live behind their own services.
+    Used for registered service integrations, including optional media examples.
     The model never calls this — only dispatch.py does, after registry check.
     """
     start = time.monotonic()

@@ -67,7 +67,7 @@ class _Config:
     # you want cost/latency predictability.
     cloud_model: str = os.getenv("CLOUD_MODEL", "openai/gpt-4o")
 
-    # ── Media Automation ──────────────────────────────────────────────────────
+    # ── Optional media capability pack configuration ──────────────────────────
     radarr_url: str = os.getenv("RADARR_URL", "http://localhost:7878")
     radarr_api_key: str = os.getenv("RADARR_API_KEY", "")
     radarr_root_folder_path: str = os.getenv("RADARR_ROOT_FOLDER_PATH", "/media/movies")
