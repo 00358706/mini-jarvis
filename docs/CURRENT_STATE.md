@@ -93,6 +93,7 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 - `docs/CAPABILITY_REGISTRY_SCHEMA.md` is a docs-only capability registry metadata contract (advisory fields, lookup outcomes, duplicate/overlap rules, routine and tool-proposal relationships); it is not implemented in runtime code.
 - `docs/TOOL_PROPOSAL_SCHEMA.md` is a docs-only tool proposal schema contract (review-only artifacts, capability lookup requirements, implementation and test plan fields, proposal outcomes); it is not implemented in runtime code.
 - `docs/LOCAL_MODEL_ADAPTER_CONTRACT.md` is a docs-only local model adapter contract (llama.cpp/Ollama/OpenAI-compatible local runtime targets, adapter responsibilities, structured output, evidence, privacy, and non-authority rules); it is not implemented in runtime code.
+- `docs/AGENT_WORKER_LOOP.md` is a docs-only future worker-loop contract; it is not implemented in runtime code.
 
 ## Current test scripts (PowerShell)
 - `scripts/test_agent_tool_policy.ps1`
