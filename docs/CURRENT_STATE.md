@@ -1,6 +1,6 @@
 # CURRENT_STATE — mini-jarvis (checkpoint)
 
-mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a **plan/policy/approval** workflow: agents may propose plans, humans approve them, and only then the gateway executes **installed** tools via a sandboxed worker with an auditable filesystem trail.
+mini-jarvis is a **local-first supervised automation gateway/control plane** that exposes `/ingest` and a **plan/policy/approval** workflow: agents may propose plans, humans approve them, and only then the gateway executes **installed** tools via a sandboxed worker with an auditable filesystem trail.
 
 ## Current architecture summary
 - **Gateway remains the authority**: validation, registry, policy, approvals, and execution live in gateway code.
@@ -43,10 +43,10 @@ mini-jarvis is a **local-first Agentic Gateway OS** that exposes `/ingest` and a
 
 ## Installed tools (current)
 - **Maintainer (read-only / proposal-only)**: `inspect_file`, `list_project_files`, `search_repo`, `propose_patch`
-- **Optional/local media example tools**: Radarr/Sonarr/SABnzbd tools (currently included capability-pack example material; installed tools remain registry-defined; agent allowlists restrict what can be proposed)
+- **Optional/local capability-pack examples (media)**: Radarr/Sonarr/SABnzbd tools (currently included example material; installed tools remain registry-defined; agent allowlists restrict what can be proposed)
 
 ## Current agents
-- `media_agent` (currently included optional/local media capability-pack example)
+- `media_agent` (currently included optional/local capability-pack example)
 - `project_maintainer_agent`
 
 ## Current Open WebUI wrappers

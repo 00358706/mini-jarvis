@@ -46,6 +46,6 @@ These invariants are the “guard rails” for mini-jarvis. Changes should prese
 - Do not change `/ingest` unless explicitly asked.
 
 ## No hidden execution channels
-- Do not add alternate endpoints that execute tools outside `/plans/{plan_id}/execute` or the existing ingest routing path.
+- Do not add alternate endpoints that execute tools outside approved/controlled execution paths such as `/plans/{plan_id}/execute`.
+- Treat `/ingest` as an input/routing surface only; classifier output must not grant execution authority.
 - Do not add endpoints that mutate workspaces or arbitrary filesystem state.
-
